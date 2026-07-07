@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5b5fc7">
+<title>갓생 포인트</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <div id="hero"></div>
+  <div id="view"></div>
+</div>
+<nav><div>
+  <button data-tab="today"><span class="ic">🏠</span>오늘</button>
+  <button data-tab="habit"><span class="ic">🌱</span>습관</button>
+  <button data-tab="plans"><span class="ic">📋</span>계획</button>
+  <button data-tab="proj"><span class="ic">🚩</span>프로젝트</button>
+  <button data-tab="shop"><span class="ic">🎁</span>보상</button>
+  <button data-tab="stats"><span class="ic">📊</span>통계</button>
+  <button data-tab="setting"><span class="ic">⚙️</span>설정</button>
+</div></nav>
+<div class="toast" id="toast"></div>
+
+<!-- 로드 순서 중요: core → services → app → components → boot -->
+<script src="core/utils.js"></script>
+<script src="core/store.js"></script>
+<script src="services/points.js"></script>
+<script src="services/schedule.js"></script>
+<script src="services/actions.js"></script>
+<script src="services/reconcile.js"></script>
+<script src="services/sync.js"></script>
+<script src="core/app.js"></script>
+<script src="components/common.js"></script>
+<script src="components/hero.js"></script>
+<script src="components/habits.js"></script>
+<script src="components/today.js"></script>
+<script src="components/plans.js"></script>
+<script src="components/projects.js"></script>
+<script src="components/shop.js"></script>
+<script src="components/stats.js"></script>
+<script src="components/settings.js"></script>
+<script src="core/boot.js"></script>
+</body>
+</html>

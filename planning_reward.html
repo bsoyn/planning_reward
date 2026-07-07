@@ -1,0 +1,1822 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5b5fc7">
+<title>갓생 포인트</title>
+<style>
+:root{
+  --bg:#f4f4f8; --card:#ffffff; --ink:#26263a; --sub:#8a8aa0;
+  --accent:#5b5fc7; --accent2:#7c80e8; --gold:#e8a33d; --green:#3dab6e; --red:#d95c5c;
+  --line:#e8e8f0; --shadow:0 2px 10px rgba(40,40,80,.07);
+}
+*{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent}
+body{font-family:'Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif; background:var(--bg); color:var(--ink); font-size:15px}
+#app{max-width:540px; margin:0 auto; padding:14px 14px 84px}
+h2{font-size:17px; margin:18px 0 10px}
+.card{background:var(--card); border-radius:14px; box-shadow:var(--shadow); padding:14px; margin-bottom:10px}
+.row{display:flex; align-items:center; gap:8px}
+.grow{flex:1}
+.sub{color:var(--sub); font-size:12.5px}
+.pts{color:var(--gold); font-weight:700}
+button{font-family:inherit; border:none; border-radius:10px; padding:9px 14px; font-size:14px; cursor:pointer; background:var(--accent); color:#fff; font-weight:600}
+button.ghost{background:#eef; color:var(--accent)}
+button.gray{background:#ececf2; color:#555}
+button.danger{background:#fdeaea; color:var(--red)}
+button.small{padding:5px 10px; font-size:12.5px; border-radius:8px}
+button:disabled{opacity:.45; cursor:default}
+input,select{font-family:inherit; font-size:14px; padding:9px 10px; border:1.5px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); width:100%}
+input:focus,select:focus{outline:none; border-color:var(--accent2)}
+label{font-size:12.5px; color:var(--sub); font-weight:600; display:block; margin:10px 0 4px}
+
+/* header */
+.hero{background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; border-radius:16px; padding:16px; margin-bottom:12px}
+.hero .big{font-size:30px; font-weight:800}
+.hero .lv{font-size:13px; opacity:.92; margin-top:2px}
+.bar{height:7px; background:rgba(255,255,255,.25); border-radius:4px; margin-top:9px; overflow:hidden}
+.bar>div{height:100%; background:#ffd77a; border-radius:4px}
+.badges{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap}
+.badge{background:rgba(255,255,255,.18); border-radius:8px; padding:4px 9px; font-size:12px}
+
+/* tabs */
+nav{position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--line); display:flex; z-index:50; padding-bottom:env(safe-area-inset-bottom)}
+nav>div{max-width:540px; margin:0 auto; display:flex; flex:1}
+nav button{flex:1; background:none; color:var(--sub); font-size:11px; padding:8px 0 9px; border-radius:0; font-weight:600; display:flex; flex-direction:column; gap:2px; align-items:center}
+nav button .ic{font-size:19px}
+nav button.on{color:var(--accent)}
+
+/* plan items */
+.plan{display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--line)}
+.plan:last-child{border-bottom:none}
+.plan .t{font-weight:700; font-size:14.5px}
+.plan.done .t{text-decoration:line-through; color:var(--sub)}
+.chip{display:inline-block; font-size:11px; padding:2px 7px; border-radius:6px; background:#eef; color:var(--accent); margin-right:4px; font-weight:600}
+.chip.time{background:#fdf3e3; color:var(--gold)}
+.chip.d1{background:#e7f6ee; color:var(--green)} .chip.d2{background:#fdf3e3; color:var(--gold)} .chip.d3{background:#fdeaea; color:var(--red)}
+
+.daybtns{display:flex; gap:5px; margin-top:4px}
+.daybtns button{flex:1; padding:7px 0; font-size:12.5px; background:#ececf2; color:#777; border-radius:8px}
+.daybtns button.on{background:var(--accent); color:#fff}
+
+.toast{position:fixed; left:50%; transform:translateX(-50%); bottom:86px; background:#2c2c44; color:#fff; padding:12px 18px; border-radius:12px; font-size:13.5px; box-shadow:0 4px 18px rgba(0,0,0,.25); z-index:99; opacity:0; transition:opacity .25s; pointer-events:none; max-width:88%; text-align:center; line-height:1.5}
+.toast.show{opacity:1}
+.empty{text-align:center; color:var(--sub); padding:26px 0; font-size:13.5px}
+.stat3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px}
+.stat3 .card{text-align:center; margin:0; padding:12px 6px}
+.stat3 .n{font-size:20px; font-weight:800}
+.hist{font-size:13px; padding:7px 0; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px}
+.hist:last-child{border:none}
+details summary{cursor:pointer; font-weight:700; font-size:14px; padding:4px 0}
+.hidden{display:none}
+
+/* v2: 프로젝트 진행률 바, 완료 입력 폼 */
+.pbar{height:7px; background:#ececf2; border-radius:4px; margin-top:7px; overflow:hidden}
+.pbar>div{height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:4px}
+.cform{display:flex; gap:8px; align-items:flex-end; background:#f6f6fb; border-radius:10px; padding:10px; margin:4px 0 8px}
+.cform label{margin-top:0}
+.msrow input{min-width:0}
+
+/* v3: 습관 트래커 그리드 */
+.hgrid{display:grid; grid-template-columns:1fr repeat(7,30px); gap:4px; align-items:center; padding:5px 0; border-bottom:1px solid var(--line)}
+.hgrid:last-of-type{border-bottom:none}
+.hcell{width:26px; height:26px; border-radius:8px; background:#ececf2; display:flex; align-items:center; justify-content:center; font-size:13px; color:#fff; padding:0; margin:0 auto}
+.hcell.done{background:var(--green)}
+.hcell.off{opacity:.3}
+button.hcell.today{outline:2px solid var(--accent2); cursor:pointer; background:#ececf2}
+button.hcell.today.done{background:var(--green)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hero"></div>
+  <div id="view"></div>
+</div>
+<nav><div>
+  <button data-tab="today"><span class="ic">🏠</span>오늘</button>
+  <button data-tab="habit"><span class="ic">🌱</span>습관</button>
+  <button data-tab="plans"><span class="ic">📋</span>계획</button>
+  <button data-tab="proj"><span class="ic">🚩</span>프로젝트</button>
+  <button data-tab="shop"><span class="ic">🎁</span>보상</button>
+  <button data-tab="stats"><span class="ic">📊</span>통계</button>
+  <button data-tab="setting"><span class="ic">⚙️</span>설정</button>
+</div></nav>
+<div class="toast" id="toast"></div>
+
+<!-- 로드 순서 중요: core → services → app → components → boot -->
+<script>
+/* ===== core/utils.js ===== */
+/* 공통 유틸 + 이벤트 버스 + 토스트 */
+(function (PR) {
+  'use strict';
+
+  PR.DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+  PR.uid = function () {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  };
+
+  PR.todayStr = function (d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+
+  /* 해당 날짜가 속한 주의 월요일 (주간 쿼터 기준) */
+  PR.weekKey = function (dateStr) {
+    var d = new Date((dateStr || PR.todayStr()) + 'T12:00:00');
+    var wd = (d.getDay() + 6) % 7; // 월=0
+    d.setDate(d.getDate() - wd);
+    return PR.todayStr(d);
+  };
+
+  /* a → b 일수 차 (b가 미래면 양수) */
+  PR.daysBetween = function (a, b) {
+    return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+  };
+
+  PR.esc = function (s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+
+  /* 이벤트 버스: 컴포넌트 간 결합도를 낮추는 pub/sub */
+  var subs = {};
+  PR.bus = {
+    on: function (ev, fn) { (subs[ev] = subs[ev] || []).push(fn); },
+    emit: function (ev, data) { (subs[ev] || []).forEach(function (fn) { fn(data); }); }
+  };
+
+  var toastTimer = null;
+  PR.toast = function (html) {
+    var t = document.getElementById('toast');
+    if (!t) return;
+    t.innerHTML = html;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2600);
+  };
+})(window.PR = window.PR || {});
+
+/* ===== core/store.js ===== */
+(function (PR) {
+  'use strict';
+
+  var LS_KEY = 'planning_reward_v1';
+  var VER = 4;
+
+  function blank() {
+    return { v: VER, points: 0, earned: 0, plans: [], logs: [], projects: [], rewards: [], purchases: [], bestStreak: 0, lastMod: 0,
+      freezes: 1, freezeMark: 0, frozenDates: [], lastReconcile: '', penaltyOn: true };
+  }
+
+  function migrateV1(d) {
+    d.plans = (d.plans || []).map(function (p) {
+      var auto = p.type === 'timer' ? p.target : p.type === 'count' ? p.target : 20;
+      var base = (p.pts != null && p.pts !== '') ? Number(p.pts) : auto;
+      base = Math.round(base * ([1, 1, 1.5, 2][p.diff] || 1));
+      return {
+        id: p.id, title: p.title, kind: 'habit', basePts: base,
+        targetT: p.type === 'timer' ? p.target : null,
+        targetQ: p.type === 'count' ? p.target : null,
+        unitQ: p.unit || '', mode: 'or', time: p.time || '',
+        freq: { type: 'days', days: p.days || [] },
+        deadline: '', createdAt: '', done: false, active: p.active !== false
+      };
+    });
+    d.logs = (d.logs || []).map(function (l) { return Object.assign({ r: 1, full: true }, l); });
+    d.projects = [];
+    d.v = 2;
+    return d;
+  }
+
+  function migrateV2(d) {
+    d.plans = (d.plans || []).map(function (p) {
+      return Object.assign({ duty: false }, p, { kind: p.kind === 'habit' ? 'routine' : p.kind });
+    });
+    d.logs = (d.logs || []).map(function (l) { return Object.assign({ duty: false }, l); });
+    d.v = 3;
+    return d;
+  }
+
+  function migrateV3(d) {
+    d.freezes = 1;
+    d.freezeMark = 0;
+    d.frozenDates = [];
+    d.lastReconcile = PR.todayStr();
+    d.penaltyOn = true;
+    d.v = 4;
+    return d;
+  }
+
+  function normalize(d) {
+    if (!d || !d.v) return blank();
+    if (d.v === 1) d = migrateV1(d);
+    if (d.v === 2) d = migrateV2(d);
+    if (d.v === 3) d = migrateV3(d);
+    if (d.v !== VER) return blank();
+    return Object.assign(blank(), d);
+  }
+
+  function load() {
+    try { return normalize(JSON.parse(localStorage.getItem(LS_KEY))); } catch (e) {}
+    return blank();
+  }
+
+  PR.store = {
+    LS_KEY: LS_KEY,
+    blank: blank,
+    normalize: normalize,
+    state: load(),
+    save: function () {
+      this.state.lastMod = Date.now();
+      localStorage.setItem(LS_KEY, JSON.stringify(this.state));
+      PR.bus.emit('saved');
+    },
+    replace: function (next) {
+      this.state = normalize(next);
+      this.save();
+    },
+    setRaw: function (next) {
+      this.state = normalize(next);
+      localStorage.setItem(LS_KEY, JSON.stringify(this.state));
+    }
+  };
+})(window.PR = window.PR || {});
+
+/* ===== services/points.js ===== */
+(function (PR) {
+  'use strict';
+
+  var FULL = 1 - 1e-9;
+
+  function ratio(p, input) {
+    input = input || {};
+    var rT = p.targetT ? (Number(input.t) || 0) / p.targetT : null;
+    var rQ = p.targetQ ? (Number(input.q) || 0) / p.targetQ : null;
+    if (rT != null && rQ != null) return p.mode === 'and' ? Math.min(rT, rQ) : Math.max(rT, rQ);
+    if (rT != null) return rT;
+    if (rQ != null) return rQ;
+    return 1;
+  }
+
+  function metOn(ds) {
+    return PR.store.state.logs.some(function (l) {
+      return l.date === ds && l.full && !l.duty && !l.adhoc;
+    });
+  }
+
+  function obligationOn(ds) {
+    return PR.store.state.plans.some(function (p) {
+      return !p.duty && (p.kind === 'habit' || p.kind === 'routine') &&
+        (!p.freq || p.freq.type !== 'weekly') && PR.sched && PR.sched.isScheduledOn(p, ds);
+    });
+  }
+
+  function computeStreak(extraToday) {
+    var frozen = {};
+    (PR.store.state.frozenDates || []).forEach(function (d) { frozen[d] = 1; });
+    var todayS = PR.todayStr();
+    function met(ds) { return frozen[ds] || metOn(ds) || (extraToday && ds === todayS); }
+
+    var cur = 0;
+    var d = new Date();
+    if (!met(todayS)) d.setDate(d.getDate() - 1);
+    for (var i = 0; i < 3650; i++) {
+      var ds = PR.todayStr(d);
+      if (met(ds)) { cur++; }
+      else if (obligationOn(ds)) { break; }
+      d.setDate(d.getDate() - 1);
+    }
+    return cur;
+  }
+
+  function streakBonus(s) { return Math.min(s * 0.02, 0.5); }
+
+  function deadlineState(p, todayStr) {
+    if (!p.deadline) return { earlyRatio: 0, late: false };
+    var today = todayStr || PR.todayStr();
+    var total = Math.max(1, PR.daysBetween(p.createdAt || today, p.deadline));
+    var left = PR.daysBetween(today, p.deadline);
+    if (left < 0) return { earlyRatio: 0, late: true };
+    return { earlyRatio: Math.min(left / total, 1), late: false };
+  }
+
+  function calcAward(p, input, now) {
+    now = now || new Date();
+    var base = p.basePts;
+    var r = ratio(p, input);
+    var rc = Math.min(r, 1);
+    var full = r >= FULL;
+
+    var s = computeStreak(!p.duty);
+    var sb = full ? streakBonus(s) : 0;
+    var eff = full ? 1 : Math.max(Math.pow(rc, 1.5), rc > 0 ? 0.1 : 0);
+    var main = Math.round(base * eff * (1 + sb));
+
+    var onTime = false, otPts = 0;
+    if (full && p.time) {
+      var cur = now.getHours() * 60 + now.getMinutes();
+      var hm = p.time.split(':').map(Number);
+      var from = hm[0] * 60 + hm[1];
+      var ok;
+      if (p.timeTo) {
+        var hm2 = p.timeTo.split(':').map(Number);
+        var to = hm2[0] * 60 + hm2[1];
+        ok = to >= from ? (cur >= from && cur <= to) : (cur >= from || cur <= to);
+      } else {
+        ok = Math.abs(cur - from) <= 30;
+      }
+      if (ok) { onTime = true; otPts = Math.round(base * 0.3); }
+    }
+
+    var over = r > 1 ? Math.round(base * 0.5 * Math.min(r - 1, 1)) : 0;
+
+    var early = 0, late = false;
+    if (p.kind === 'deadline') {
+      var ds = deadlineState(p);
+      late = ds.late;
+      if (full && !late) early = Math.round(base * 0.3 * ds.earlyRatio);
+    }
+
+    var total = main + otPts + over + early;
+    if (late) total = Math.round(total * 0.5);
+
+    return { total: total, main: main, otPts: otPts, over: over, early: early,
+             late: late, onTime: onTime, r: r, full: full, streak: s, sb: sb };
+  }
+
+  var SURPRISE_P = 0.13;
+  function rollSurprise(base) {
+    if (!base || Math.random() >= SURPRISE_P) return { hit: false, pts: 0 };
+    var pts = Math.max(1, Math.round(base * (0.2 + Math.random() * 0.3)));
+    return { hit: true, pts: pts };
+  }
+
+  function projectBonus(pj) {
+    var bonus = pj.bonusPts || 0;
+    if (!pj.deadline) return { total: bonus, early: 0, late: false };
+    var ds = deadlineState(pj);
+    if (ds.late) return { total: Math.round(bonus * 0.5), early: 0, late: true };
+    var early = Math.round(bonus * 0.3 * ds.earlyRatio);
+    return { total: bonus + early, early: early, late: false };
+  }
+
+  PR.points = {
+    ratio: ratio, metOn: metOn, obligationOn: obligationOn,
+    computeStreak: computeStreak, streakBonus: streakBonus,
+    deadlineState: deadlineState, calcAward: calcAward,
+    rollSurprise: rollSurprise, projectBonus: projectBonus
+  };
+})(window.PR = window.PR || {});
+
+/* ===== services/schedule.js ===== */
+/* 계획 스케줄 판정 — 순수 로직 */
+(function (PR) {
+  'use strict';
+
+  /* 반복 계획(습관/반복적인 일)이 해당 날짜에 예정인지 (요일 고정: 매칭 / 주 n회: 매일 노출) */
+  function isScheduledOn(p, dateStr) {
+    if (!p.active || (p.kind !== 'habit' && p.kind !== 'routine')) return false;
+    var f = p.freq || { type: 'days', days: [] };
+    if (f.type === 'weekly') return true;
+    if (f.days && f.days.length) {
+      var wd = new Date(dateStr + 'T12:00:00').getDay();
+      return f.days.indexOf(wd) !== -1;
+    }
+    return true; // 요일 미선택 = 매일
+  }
+
+  /* 오늘 완료 기록 (계획당 하루 1회) */
+  function todayLog(planId) {
+    var today = PR.todayStr();
+    return PR.store.state.logs.find(function (l) { return l.planId === planId && l.date === today; });
+  }
+
+  /* 이번 주 완전 달성 횟수 (주간 쿼터용, 월요일 시작) */
+  function weekFullCount(planId, dateStr) {
+    var wk = PR.weekKey(dateStr || PR.todayStr());
+    return PR.store.state.logs.filter(function (l) {
+      return l.planId === planId && l.full && PR.weekKey(l.date) === wk;
+    }).length;
+  }
+
+  /* 미완료 마감형 계획 (마감 임박순) */
+  function pendingDeadlines() {
+    return PR.store.state.plans
+      .filter(function (p) { return p.kind === 'deadline' && p.active && !p.done; })
+      .sort(function (a, b) { return (a.deadline || '9999').localeCompare(b.deadline || '9999'); });
+  }
+
+  /* 계획별 개인 스트릭 (요일 고정: 연속 예정일 / 주 n회: 연속 충족 주) */
+  function planStreak(p) {
+    var f = p.freq || { type: 'days', days: [] };
+    if (f.type === 'weekly') {
+      var n = 0;
+      var wk = PR.weekKey(PR.todayStr());
+      if (weekFullCount(p.id, wk) >= f.n) n++;
+      var d = new Date(wk + 'T12:00:00');
+      for (var i = 0; i < 520; i++) {
+        d.setDate(d.getDate() - 7);
+        if (weekFullCount(p.id, PR.todayStr(d)) >= f.n) n++;
+        else break;
+      }
+      return { n: n, unit: '주' };
+    }
+    var dates = {};
+    PR.store.state.logs.forEach(function (l) { if (l.planId === p.id && l.full) dates[l.date] = 1; });
+    var cur = 0;
+    var day = new Date();
+    var ds = PR.todayStr(day);
+    if (isScheduledOn(p, ds) && !dates[ds]) day.setDate(day.getDate() - 1); // 오늘 미완료 = 아직 안 끊김
+    for (var j = 0; j < 3650; j++) {
+      ds = PR.todayStr(day);
+      if (isScheduledOn(p, ds)) {
+        if (dates[ds]) cur++;
+        else break;
+      }
+      day.setDate(day.getDate() - 1);
+    }
+    return { n: cur, unit: '일' };
+  }
+
+  PR.sched = {
+    isScheduledOn: isScheduledOn,
+    todayLog: todayLog,
+    weekFullCount: weekFullCount,
+    pendingDeadlines: pendingDeadlines,
+    planStreak: planStreak
+  };
+})(window.PR = window.PR || {});
+
+/* ===== services/actions.js ===== */
+(function (PR) {
+  'use strict';
+
+  function commit() {
+    PR.store.save();
+    PR.bus.emit('change');
+  }
+
+  function awardToast(a, surprisePts, extra) {
+    var total = a.total + (surprisePts || 0);
+    var msg = (a.full ? '✅' : '🔸') + ' +' + total + 'P' + (a.full ? ' 획득!' : ' (부분 달성 ' + Math.round(Math.min(a.r, 1) * 100) + '%)');
+    var parts = [];
+    if (a.full && a.sb > 0) parts.push('스트릭 ' + a.streak + '일 +' + Math.round(a.sb * 100) + '%');
+    if (a.onTime) parts.push('⏰ 정시 +' + a.otPts + 'P');
+    if (a.over > 0) parts.push('💪 초과 +' + a.over + 'P');
+    if (a.early > 0) parts.push('🚀 조기 +' + a.early + 'P');
+    if (surprisePts) parts.push('🎉 서프라이즈 +' + surprisePts + 'P!');
+    if (a.late) parts.push('⏳ 마감 지남 -50%');
+    if (parts.length) msg += '<br><span style="opacity:.75">' + parts.join(' · ') + '</span>';
+    if (extra) msg += extra;
+    PR.toast(msg);
+  }
+
+  var FREEZE_CAP = 3;
+  function grantFreezes(streak) {
+    var S = PR.store.state;
+    var got = 0;
+    while (S.freezeMark + 7 <= streak) {
+      S.freezeMark += 7;
+      if (S.freezes < FREEZE_CAP) { S.freezes++; got++; }
+    }
+    return got ? '<br><span style="opacity:.75">🛡 방어막 +' + got + ' (연속 ' + S.freezeMark + '일 달성)</span>' : '';
+  }
+
+  var A = {};
+
+  A.completePlan = function (id, input) {
+    var S = PR.store.state;
+    var p = S.plans.find(function (x) { return x.id === id; });
+    if (!p || PR.sched.todayLog(id)) return;
+    var a = PR.points.calcAward(p, input);
+    var sp = a.full ? PR.points.rollSurprise(p.basePts) : { hit: false, pts: 0 };
+    var total = a.total + sp.pts;
+    S.logs.push({ id: PR.uid(), planId: id, date: PR.todayStr(), pts: total, r: a.r, full: a.full, duty: !!p.duty, onTime: a.onTime, surprise: sp.pts, ts: Date.now() });
+    S.points += total;
+    S.earned += total;
+    var freezeMsg = '';
+    if (a.full && !p.duty) {
+      S.bestStreak = Math.max(S.bestStreak, a.streak);
+      freezeMsg = grantFreezes(a.streak);
+    }
+    if (p.kind === 'deadline') p.done = true;
+    commit();
+    awardToast(a, sp.pts, freezeMsg);
+  };
+
+  A.uncompletePlan = function (id) {
+    var S = PR.store.state;
+    var l = PR.sched.todayLog(id);
+    if (!l) return;
+    S.points -= l.pts;
+    S.earned -= l.pts;
+    S.logs = S.logs.filter(function (x) { return x.id !== l.id; });
+    var p = S.plans.find(function (x) { return x.id === id; });
+    if (p && p.kind === 'deadline') p.done = false;
+    commit();
+  };
+
+  A.savePlan = function (p, isEdit) {
+    var S = PR.store.state;
+    if (isEdit) {
+      S.plans = S.plans.map(function (x) { return x.id === p.id ? p : x; });
+    } else {
+      S.plans.push(p);
+    }
+    commit();
+    PR.toast(PR.esc(p.title) + ' 저장 완료 ✓');
+  };
+
+  A.deletePlan = function (id) {
+    var S = PR.store.state;
+    S.plans = S.plans.filter(function (p) { return p.id !== id; });
+    commit();
+  };
+
+  A.saveProject = function (pj) {
+    PR.store.state.projects.push(pj);
+    commit();
+    PR.toast(PR.esc(pj.title) + ' 프로젝트 시작 🚩');
+  };
+
+  A.deleteProject = function (id) {
+    var S = PR.store.state;
+    S.projects = S.projects.filter(function (p) { return p.id !== id; });
+    commit();
+  };
+
+  A.completeMilestone = function (pjId, msId) {
+    var S = PR.store.state;
+    var pj = S.projects.find(function (x) { return x.id === pjId; });
+    if (!pj || pj.done) return;
+    var ms = pj.milestones.find(function (m) { return m.id === msId; });
+    if (!ms || ms.done) return;
+    ms.done = true;
+    ms.date = PR.todayStr();
+    var sp = PR.points.rollSurprise(ms.pts);
+    var msTotal = ms.pts + sp.pts;
+    S.logs.push({ id: PR.uid(), planId: 'ms:' + msId, date: ms.date, pts: msTotal, r: 1, full: true, duty: false, onTime: false, surprise: sp.pts, ts: Date.now() });
+    S.points += msTotal;
+    S.earned += msTotal;
+    var st = PR.points.computeStreak(true);
+    S.bestStreak = Math.max(S.bestStreak, st);
+    var freezeMsg = grantFreezes(st);
+    var allDone = pj.milestones.every(function (m) { return m.done; });
+    var msg = '✅ +' + msTotal + 'P — ' + PR.esc(ms.title) +
+      (sp.pts ? ' <span style="opacity:.75">🎉 서프라이즈 +' + sp.pts + 'P!</span>' : '') + freezeMsg;
+    if (allDone) {
+      var b = PR.points.projectBonus(pj);
+      pj.done = true;
+      pj.doneDate = PR.todayStr();
+      S.logs.push({ id: PR.uid(), planId: 'pj:' + pj.id, date: pj.doneDate, pts: b.total, r: 1, full: true, duty: false, onTime: false, ts: Date.now() });
+      S.points += b.total;
+      S.earned += b.total;
+      msg = '🏆 프로젝트 완주! 보너스 +' + b.total + 'P' +
+        (b.early ? '<br><span style="opacity:.75">🚀 조기 완주 +' + b.early + 'P 포함</span>' : '') +
+        (b.late ? '<br><span style="opacity:.75">⏳ 마감 지남 -50%</span>' : '');
+    }
+    commit();
+    PR.toast(msg);
+  };
+
+  A.uncompleteMilestone = function (pjId, msId) {
+    var S = PR.store.state;
+    var pj = S.projects.find(function (x) { return x.id === pjId; });
+    if (!pj || pj.done) return;
+    var ms = pj.milestones.find(function (m) { return m.id === msId; });
+    if (!ms || !ms.done) return;
+    ms.done = false;
+    ms.date = '';
+    var l = S.logs.find(function (x) { return x.planId === 'ms:' + msId; });
+    if (l) {
+      S.points -= l.pts;
+      S.earned -= l.pts;
+      S.logs = S.logs.filter(function (x) { return x.id !== l.id; });
+    }
+    commit();
+  };
+
+  A.addReward = function (name, cost) {
+    PR.store.state.rewards.push({ id: PR.uid(), name: name, cost: cost });
+    commit();
+  };
+
+  A.deleteReward = function (id) {
+    var S = PR.store.state;
+    S.rewards = S.rewards.filter(function (r) { return r.id !== id; });
+    commit();
+  };
+
+  A.buyReward = function (id) {
+    var S = PR.store.state;
+    var r = S.rewards.find(function (x) { return x.id === id; });
+    if (!r || S.points < r.cost) return;
+    S.points -= r.cost;
+    S.purchases.push({ id: PR.uid(), name: r.name, cost: r.cost, date: PR.todayStr() });
+    commit();
+    PR.toast('🎉 "' + PR.esc(r.name) + '" 구매! 마음껏 즐기세요');
+  };
+
+  A.addAdhoc = function (title, worth) {
+    var S = PR.store.state;
+    var pts = Math.max(1, Math.round(worth * 0.8));
+    S.logs.push({ id: PR.uid(), planId: 'adhoc', title: title, date: PR.todayStr(), pts: pts, r: 1, full: true, duty: false, adhoc: true, onTime: false, ts: Date.now() });
+    S.points += pts;
+    S.earned += pts;
+    commit();
+    PR.toast('🔖 번외 +' + pts + 'P <span style="opacity:.75">(가치 ' + worth + 'P의 80%)</span>');
+  };
+
+  A.deleteAdhoc = function (logId) {
+    var S = PR.store.state;
+    var l = S.logs.find(function (x) { return x.id === logId && x.adhoc; });
+    if (!l) return;
+    S.points -= l.pts;
+    S.earned -= l.pts;
+    S.logs = S.logs.filter(function (x) { return x.id !== logId; });
+    commit();
+  };
+
+  A.setPenalty = function (on) {
+    PR.store.state.penaltyOn = !!on;
+    commit();
+    PR.toast(on ? '놓친 날 소액 차감 켜짐' : '놓친 날 차감 꺼짐');
+  };
+
+  A.resetAll = function () {
+    PR.store.replace(PR.store.blank());
+    PR.bus.emit('change');
+  };
+
+  A.importState = function (d) {
+    PR.store.replace(d);
+    PR.bus.emit('change');
+    PR.toast('가져오기 완료 ✓');
+  };
+
+  PR.actions = A;
+})(window.PR = window.PR || {});
+
+/* ===== services/reconcile.js ===== */
+/* 일일 정산 — 앱 로드 시 1회. 지난 "놓친 예정일"을 처리한다.
+   놓친 날(예정 있었는데 완전 달성 없음, 방어막 미보호):
+     - 방어막이 있으면 자동 소모 → 그 날을 frozenDates에 넣어 스트릭 보호 (페널티 없음)
+     - 없고 penaltyOn이면 소액 차감 (총액 상한)
+   과거 소급 방지: lastReconcile 이후 ~ 어제까지만. 오늘은 아직 안 끝났으니 건드리지 않음.
+   포인트는 0 밑으로 내려가지 않음. 처리 요약은 반환(로드 후 토스트). */
+(function (PR) {
+  'use strict';
+
+  var PENALTY_RATE = 0.2;   // 놓친 계획 기본P의 20%
+  var PENALTY_CAP = 30;     // 1회 정산 총 차감 상한
+
+  function run() {
+    var S = PR.store.state;
+    var today = PR.todayStr();
+    if (S.lastReconcile === today) return null;
+    if (!S.lastReconcile) { S.lastReconcile = today; PR.store.save(); return null; } // 첫 실행: 기준일만 설정
+
+    var frozen = {};
+    (S.frozenDates || []).forEach(function (d) { frozen[d] = 1; });
+
+    /* lastReconcile 다음날 ~ 어제까지의 놓친 예정일 수집 */
+    var missed = [];
+    var d = new Date(S.lastReconcile + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    var guard = 0;
+    while (PR.todayStr(d) < today && guard++ < 400) {
+      var ds = PR.todayStr(d);
+      if (!frozen[ds] && !PR.points.metOn(ds) && PR.points.obligationOn(ds)) {
+        /* 그 날 예정됐던 비의무 계획들의 기본P 평균 */
+        var due = S.plans.filter(function (p) {
+          return !p.duty && (p.kind === 'habit' || p.kind === 'routine') &&
+            (!p.freq || p.freq.type !== 'weekly') && PR.sched.isScheduledOn(p, ds);
+        });
+        var avg = due.reduce(function (a, p) { return a + (p.basePts || 0); }, 0) / (due.length || 1);
+        missed.push({ ds: ds, pen: Math.max(1, Math.round(avg * PENALTY_RATE)) });
+      }
+      d.setDate(d.getDate() + 1);
+    }
+
+    var saved = 0, penDays = 0, penalty = 0;
+    missed.forEach(function (m) {
+      if (S.freezes > 0) {                 // 방어막으로 보호
+        S.freezes--;
+        S.frozenDates.push(m.ds);
+        saved++;
+      } else if (S.penaltyOn) {            // 소액 차감
+        penalty += m.pen;
+        penDays++;
+      }
+    });
+
+    if (penalty > 0) {
+      penalty = Math.min(penalty, PENALTY_CAP);
+      S.points = Math.max(0, S.points - penalty);
+      S.logs.push({ id: PR.uid(), planId: 'penalty', date: today, pts: -penalty,
+        r: 0, full: false, duty: true, onTime: false, penalty: true, ts: Date.now() });
+    }
+
+    S.lastReconcile = today;
+    PR.store.save();
+
+    if (!saved && !penalty) return null;
+    var parts = [];
+    if (saved) parts.push('🛡 방어막 ' + saved + '개로 스트릭 지킴');
+    if (penalty) parts.push('🥶 놓친 날 ' + penDays + '일 · -' + penalty + 'P');
+    return parts.join('<br>');
+  }
+
+  PR.reconcile = { run: run };
+})(window.PR = window.PR || {});
+
+/* ===== services/sync.js ===== */
+/* 데이터 동기화: JSON 내보내기/가져오기 + File System Access(PC 자동 저장) */
+(function (PR) {
+  'use strict';
+
+  var fileHandle = null;
+  var writeTimer = null;
+
+  /* --- IndexedDB (파일 핸들 영속화) --- */
+  function idb() {
+    return new Promise(function (res, rej) {
+      var r = indexedDB.open('pr-db', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error); };
+    });
+  }
+  function idbSet(k, v) {
+    return idb().then(function (d) {
+      return new Promise(function (res, rej) {
+        var t = d.transaction('kv', 'readwrite');
+        t.objectStore('kv').put(v, k);
+        t.oncomplete = res;
+        t.onerror = function () { rej(t.error); };
+      });
+    });
+  }
+  function idbGet(k) {
+    return idb().then(function (d) {
+      return new Promise(function (res, rej) {
+        var t = d.transaction('kv', 'readonly');
+        var q = t.objectStore('kv').get(k);
+        q.onsuccess = function () { res(q.result); };
+        q.onerror = function () { rej(q.error); };
+      });
+    });
+  }
+
+  var sync = {
+    supported: function () { return 'showSaveFilePicker' in window; },
+    hasHandle: function () { return !!fileHandle; },
+
+    exportData: function () {
+      var blob = new Blob([JSON.stringify(PR.store.state, null, 1)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'planning_reward_data.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      PR.toast('내보내기 완료 — Syncthing 폴더에 넣으면 다른 기기로 전송돼요');
+    },
+
+    importFile: function (file) {
+      var rd = new FileReader();
+      rd.onload = function () {
+        try {
+          var d = JSON.parse(rd.result);
+          if (!d.v || d.v < 1 || d.v > 3) throw 0;
+          if (d.lastMod < PR.store.state.lastMod &&
+              !confirm('가져오는 데이터가 현재 데이터보다 오래됐어요. 그래도 덮어쓸까요?')) return;
+          PR.actions.importState(d);
+        } catch (e) {
+          PR.toast('올바른 데이터 파일이 아니에요');
+        }
+      };
+      rd.readAsText(file);
+    },
+
+    linkFile: function () {
+      return window.showSaveFilePicker({
+        suggestedName: 'planning_reward_data.json',
+        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+      }).then(function (h) {
+        fileHandle = h;
+        return idbSet('fh', h);
+      }).then(function () {
+        sync.write();
+        PR.toast('파일 연결 완료 — 이제 자동 저장돼요');
+        PR.bus.emit('change');
+      }).catch(function () { /* 사용자 취소 */ });
+    },
+
+    /* 디바운스된 파일 쓰기 (store 저장 시 자동 호출) */
+    write: function () {
+      if (!fileHandle) return;
+      clearTimeout(writeTimer);
+      writeTimer = setTimeout(function () {
+        fileHandle.createWritable().then(function (w) {
+          return w.write(JSON.stringify(PR.store.state, null, 1)).then(function () { return w.close(); });
+        }).catch(function () { fileHandle = null; });
+      }, 400);
+    },
+
+    /* 시작 시: 연결된 파일이 더 최신이면 그 데이터로 복원 */
+    restoreFile: function () {
+      if (!sync.supported()) return Promise.resolve();
+      return idbGet('fh').then(function (h) {
+        if (!h) return;
+        return h.queryPermission({ mode: 'readwrite' }).then(function (perm) {
+          if (perm !== 'granted') return; // 재허용은 사용자가 '파일 연결' 버튼으로
+          fileHandle = h;
+          return h.getFile().then(function (f) { return f.text(); }).then(function (txt) {
+            var d = JSON.parse(txt);
+            if (d.v >= 1 && d.v <= 3 && d.lastMod > PR.store.state.lastMod) {
+              PR.store.setRaw(d);
+              PR.bus.emit('change');
+            }
+          });
+        });
+      }).catch(function () {});
+    }
+  };
+
+  PR.bus.on('saved', function () { sync.write(); });
+  PR.sync = sync;
+})(window.PR = window.PR || {});
+
+/* ===== core/app.js ===== */
+(function (PR) {
+  'use strict';
+
+  PR.app = {
+    tab: 'today',
+    views: {},
+
+    register: function (name, view) { this.views[name] = view; },
+
+    render: function () {
+      document.querySelectorAll('nav button').forEach(function (b) {
+        b.classList.toggle('on', b.dataset.tab === PR.app.tab);
+      });
+      var hero = document.getElementById('hero');
+      if (hero && this.views.hero) hero.innerHTML = this.views.hero.render();
+
+      var root = document.getElementById('view');
+      var view = this.views[this.tab];
+      if (!root || !view) return;
+      root.innerHTML = view.render();
+      if (view.bind) view.bind(root);
+    },
+
+    setTab: function (name) {
+      var prev = this.views[this.tab];
+      if (prev && prev.onNavAway) prev.onNavAway();
+      this.tab = name;
+      this.render();
+    },
+
+    init: function () {
+      var nav = document.querySelector('nav');
+      if (nav) nav.addEventListener('click', function (e) {
+        var b = e.target.closest('button');
+        if (b && b.dataset.tab) PR.app.setTab(b.dataset.tab);
+      });
+      PR.bus.on('change', function () { PR.app.render(); });
+      var summary = PR.reconcile && PR.reconcile.run();
+      this.render();
+      if (summary) setTimeout(function () { PR.toast(summary); }, 400);
+      PR.sync.restoreFile();
+    }
+  };
+})(window.PR = window.PR || {});
+
+/* ===== components/common.js ===== */
+/* 컴포넌트 공용 뷰 헬퍼 */
+(function (PR) {
+  'use strict';
+
+  function planChips(p) {
+    var c = '';
+    if (p.targetT) c += '<span class="chip">⏱ ' + p.targetT + '분</span>';
+    if (p.targetQ) c += '<span class="chip">🔢 ' + p.targetQ + (p.unitQ || '개') + '</span>';
+    if (p.targetT && p.targetQ) c += '<span class="chip" style="background:#f0e8fd;color:#8b5cf6">' + (p.mode === 'and' ? '둘 다' : '둘 중 하나') + '</span>';
+    if (!p.targetT && !p.targetQ) c += '<span class="chip">✔ O/X</span>';
+    if (p.time) c += '<span class="chip time">⏰ ' + p.time + (p.timeTo ? '~' + p.timeTo : '') + '</span>';
+    if (p.duty) c += '<span class="chip" style="background:#e8e8ee;color:#777">의무</span>';
+    if (p.kind === 'habit' || p.kind === 'routine') {
+      var f = p.freq || { type: 'days', days: [] };
+      var dd = f.type === 'weekly' ? '주 ' + f.n + '회'
+        : (f.days && f.days.length) ? f.days.map(function (d) { return PR.DAYS[d]; }).join('') : '매일';
+      c += '<span class="chip" style="background:#f0f0f5;color:#999">' + dd + '</span>';
+    }
+    if (p.kind === 'deadline' && p.deadline) {
+      var left = PR.daysBetween(PR.todayStr(), p.deadline);
+      var lbl = left < 0 ? '마감 지남' : left === 0 ? 'D-day' : 'D-' + left;
+      c += '<span class="chip ' + (left <= 3 ? 'd3' : 'time') + '">📅 ' + lbl + '</span>';
+    }
+    return c;
+  }
+
+  /* 진행률 바 (프로젝트) */
+  function progressBar(done, total) {
+    var pct = total ? Math.round(done / total * 100) : 0;
+    return '<div class="pbar"><div style="width:' + pct + '%"></div></div>' +
+      '<div class="sub" style="margin-top:3px">' + done + '/' + total + ' 단계 (' + pct + '%)</div>';
+  }
+
+  /* 완료 입력 폼 (목표가 있는 계획용). idPrefix로 요소 구분 */
+  function completeForm(p, idPrefix) {
+    var h = '<div class="cform" id="' + idPrefix + '-form">';
+    if (p.targetT) h += '<div class="grow"><label>실제 시간 (분)</label><input type="number" min="0" id="' + idPrefix + '-t" value="' + p.targetT + '"></div>';
+    if (p.targetQ) h += '<div class="grow"><label>실제 분량 (' + PR.esc(p.unitQ || '개') + ')</label><input type="number" min="0" id="' + idPrefix + '-q" value="' + p.targetQ + '"></div>';
+    h += '<button data-confirm="' + p.id + '" style="align-self:flex-end">지급</button></div>';
+    return h;
+  }
+
+  PR.vh = { planChips: planChips, progressBar: progressBar, completeForm: completeForm };
+})(window.PR = window.PR || {});
+
+/* ===== components/hero.js ===== */
+(function (PR) {
+  'use strict';
+
+  PR.app.register('hero', {
+    render: function () {
+      var S = PR.store.state;
+      var st = PR.points.computeStreak(false);
+      var today = PR.todayStr();
+      var todayPts = S.logs.filter(function (l) { return l.date === today; })
+        .reduce(function (a, l) { return a + l.pts; }, 0);
+      return '' +
+        '<div class="hero">' +
+          '<div class="row"><div class="grow">' +
+            '<div class="big">' + S.points.toLocaleString() + ' P</div>' +
+            '<div class="lv">오늘 +' + todayPts.toLocaleString() + 'P · 누적 ' + S.earned.toLocaleString() + 'P</div>' +
+          '</div><div style="font-size:34px">' + (st >= 7 ? '🔥' : st >= 3 ? '✨' : '🌱') + '</div></div>' +
+          '<div class="badges">' +
+            '<span class="badge">🔥 스트릭 ' + st + '일</span>' +
+            '<span class="badge">🏆 최고 ' + S.bestStreak + '일</span>' +
+            '<span class="badge">🛡 방어막 ' + (S.freezes || 0) + '</span>' +
+          '</div>' +
+        '</div>';
+    }
+  });
+})(window.PR = window.PR || {});
+
+/* ===== components/habits.js ===== */
+/* 습관 탭: 해빗트래커 그리드 (최근 7일) + 습관 관리
+   습관 = 정해진 시각 없이 주기적으로 하면 좋은 것. 단순 O/X 체크. */
+(function (PR) {
+  'use strict';
+
+  var editing = null;
+
+  function habits() {
+    return PR.store.state.plans.filter(function (p) { return p.kind === 'habit' && p.active; });
+  }
+
+  function last7() {
+    var out = [];
+    for (var i = 6; i >= 0; i--) {
+      var d = new Date(); d.setDate(d.getDate() - i);
+      out.push(PR.todayStr(d));
+    }
+    return out;
+  }
+
+  function gridHtml() {
+    var hs = habits();
+    if (!hs.length) return '<div class="card"><div class="empty">습관을 추가해 보세요!<br>물 마시기, 스트레칭, 일기 쓰기 같은 것들 🌱</div></div>';
+    var days = last7();
+    var today = PR.todayStr();
+    var logsBy = {};
+    PR.store.state.logs.forEach(function (l) { logsBy[l.planId + '|' + l.date] = l.full; });
+
+    var head = '<div class="hgrid" style="margin-bottom:2px"><div></div>' + days.map(function (ds) {
+      var d = new Date(ds + 'T12:00:00');
+      return '<div class="sub" style="text-align:center">' + PR.DAYS[d.getDay()] + '<br>' + d.getDate() + '</div>';
+    }).join('') + '</div>';
+
+    var rows = hs.map(function (p) {
+      var st = PR.sched.planStreak(p);
+      var quota = '';
+      if (p.freq && p.freq.type === 'weekly') {
+        var k = PR.sched.weekFullCount(p.id);
+        quota = ' · 이번 주 ' + Math.min(k, p.freq.n) + '/' + p.freq.n + (k >= p.freq.n ? ' ✓' : '');
+      }
+      var cells = days.map(function (ds) {
+        var done = !!logsBy[p.id + '|' + ds];
+        var sched = PR.sched.isScheduledOn(p, ds);
+        if (ds === today) {
+          return '<button class="hcell today ' + (done ? 'done' : '') + '" data-hb="' + p.id + '">' + (done ? '✓' : '') + '</button>';
+        }
+        return '<div class="hcell ' + (done ? 'done' : sched ? '' : 'off') + '">' + (done ? '✓' : '') + '</div>';
+      }).join('');
+      return '<div class="hgrid"><div style="min-width:0">' +
+        '<div class="t" style="font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">' + PR.esc(p.title) + '</div>' +
+        '<div class="sub">🔥' + st.n + st.unit + ' · +' + p.basePts + 'P' + quota + '</div>' +
+      '</div>' + cells + '</div>';
+    }).join('');
+
+    return '<div class="card">' + head + rows +
+      '<div class="sub" style="margin-top:8px">오늘 칸을 눌러 체크/해제 · 흐린 칸은 예정일 아님</div></div>';
+  }
+
+  function formHtml() {
+    var p = editing || { title: '', basePts: 10, freq: { type: 'days', days: [] } };
+    var f = p.freq || { type: 'days', days: [] };
+    var dayBtns = PR.DAYS.map(function (d, i) {
+      return '<button type="button" class="' + ((f.days || []).indexOf(i) !== -1 ? 'on' : '') + '" data-day="' + i + '">' + d + '</button>';
+    }).join('');
+    return '<div class="card">' +
+      '<div style="font-weight:700; margin-bottom:2px">' + (editing ? '✏️ 습관 수정' : '➕ 새 습관') + '</div>' +
+      '<div class="row">' +
+        '<div class="grow" style="flex:2"><label>습관 이름</label>' +
+          '<input id="h-title" placeholder="예: 물 2L, 스트레칭" value="' + PR.esc(p.title) + '"></div>' +
+        '<div class="grow"><label>포인트</label>' +
+          '<input id="h-base" type="number" min="1" value="' + (p.basePts || '') + '"></div>' +
+      '</div>' +
+      '<div class="sub" style="margin-top:4px">습관은 가볍게 5~20P 권장</div>' +
+      '<label>반복 방식</label>' +
+      '<div class="row">' +
+        '<button type="button" class="grow ' + (f.type !== 'weekly' ? '' : 'gray') + '" id="h-ftype-days">요일 고정</button>' +
+        '<button type="button" class="grow ' + (f.type === 'weekly' ? '' : 'gray') + '" id="h-ftype-weekly">주 n회</button>' +
+      '</div>' +
+      '<div id="h-days-wrap" class="' + (f.type === 'weekly' ? 'hidden' : '') + '">' +
+        '<label>요일 (선택 안 하면 매일)</label>' +
+        '<div class="daybtns" id="h-days">' + dayBtns + '</div>' +
+      '</div>' +
+      '<div id="h-weekly-wrap" class="' + (f.type === 'weekly' ? '' : 'hidden') + '">' +
+        '<label>주당 횟수</label>' +
+        '<input id="h-wn" type="number" min="1" max="7" value="' + (f.n || 3) + '">' +
+      '</div>' +
+      '<div class="row" style="margin-top:12px">' +
+        '<button id="h-save" class="grow">' + (editing ? '수정 저장' : '습관 추가') + '</button>' +
+        (editing ? '<button id="h-cancel" class="gray">취소</button>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  function listHtml() {
+    var hs = habits();
+    if (!hs.length) return '';
+    return '<div class="card"><details><summary>습관 관리 (' + hs.length + ')</summary>' +
+      hs.map(function (p) {
+        var f = p.freq || { type: 'days', days: [] };
+        var dd = f.type === 'weekly' ? '주 ' + f.n + '회'
+          : (f.days && f.days.length) ? f.days.map(function (d) { return PR.DAYS[d]; }).join('') : '매일';
+        return '<div class="plan"><div class="grow"><div class="t">' + PR.esc(p.title) + '</div>' +
+          '<div class="sub">' + dd + ' · +' + p.basePts + 'P</div></div>' +
+          '<button class="ghost small" data-hedit="' + p.id + '">수정</button>' +
+          '<button class="danger small" data-hdel="' + p.id + '">삭제</button></div>';
+      }).join('') + '</details></div>';
+  }
+
+  function submit() {
+    var title = document.getElementById('h-title').value.trim();
+    var base = Number(document.getElementById('h-base').value);
+    if (!title) { PR.toast('습관 이름을 입력해 주세요'); return; }
+    if (!base || base < 1) { PR.toast('포인트를 입력해 주세요'); return; }
+    var weekly = !document.getElementById('h-weekly-wrap').classList.contains('hidden');
+    var p = {
+      id: editing ? editing.id : PR.uid(),
+      title: title, kind: 'habit', basePts: base, duty: false,
+      targetT: null, targetQ: null, unitQ: '', mode: 'or', time: '',
+      freq: weekly
+        ? { type: 'weekly', n: Math.min(7, Math.max(1, Number(document.getElementById('h-wn').value) || 3)) }
+        : { type: 'days', days: Array.prototype.map.call(document.querySelectorAll('#h-days button.on'), function (b) { return Number(b.dataset.day); }) },
+      deadline: '', createdAt: editing ? editing.createdAt : PR.todayStr(),
+      done: false, active: true
+    };
+    var isEdit = !!editing;
+    editing = null;
+    PR.actions.savePlan(p, isEdit);
+  }
+
+  PR.app.register('habit', {
+    render: function () {
+      return '<h2>습관 트래커</h2>' + gridHtml() + formHtml() + listHtml();
+    },
+
+    bind: function (root) {
+      root.onclick = function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        if (b.dataset.hb) { // 오늘 칸 토글
+          if (PR.sched.todayLog(b.dataset.hb)) PR.actions.uncompletePlan(b.dataset.hb);
+          else PR.actions.completePlan(b.dataset.hb, {});
+          return;
+        }
+        if (b.dataset.day !== undefined && b.dataset.day !== '') { b.classList.toggle('on'); return; }
+        if (b.id === 'h-ftype-days' || b.id === 'h-ftype-weekly') {
+          var weekly = b.id === 'h-ftype-weekly';
+          document.getElementById('h-days-wrap').classList.toggle('hidden', weekly);
+          document.getElementById('h-weekly-wrap').classList.toggle('hidden', !weekly);
+          document.getElementById('h-ftype-days').className = 'grow ' + (weekly ? 'gray' : '');
+          document.getElementById('h-ftype-weekly').className = 'grow ' + (weekly ? '' : 'gray');
+          return;
+        }
+        if (b.id === 'h-save') submit();
+        if (b.id === 'h-cancel') { editing = null; PR.app.render(); }
+        if (b.dataset.hedit) {
+          editing = JSON.parse(JSON.stringify(PR.store.state.plans.find(function (p) { return p.id === b.dataset.hedit; })));
+          PR.app.render();
+        }
+        if (b.dataset.hdel && confirm('이 습관을 삭제할까요? (기록은 유지됩니다)')) PR.actions.deletePlan(b.dataset.hdel);
+      };
+    },
+
+    onNavAway: function () { editing = null; }
+  });
+})(window.PR = window.PR || {});
+
+/* ===== components/today.js ===== */
+/* 오늘 탭: 습관 + 1회성(마감) + 반복적인 일 + 프로젝트 다음 단계 */
+(function (PR) {
+  'use strict';
+
+  var openId = null; // 완료 입력 폼이 열린 계획 id
+
+  function expectFull(p) { // 완전 달성 시 예상 포인트 (미리보기)
+    return PR.points.calcAward(p, { t: p.targetT || 0, q: p.targetQ || 0 }).total;
+  }
+
+  function planRow(p) {
+    var done = !!PR.sched.todayLog(p.id);
+    var hasTarget = p.targetT || p.targetQ;
+    var quota = '';
+    if (p.kind === 'routine' && p.freq && p.freq.type === 'weekly') {
+      var k = PR.sched.weekFullCount(p.id);
+      quota = '<span class="chip ' + (k >= p.freq.n ? 'd1' : '') + '">이번 주 ' + Math.min(k, p.freq.n) + '/' + p.freq.n + (k >= p.freq.n ? ' ✓' : '') + '</span>';
+    }
+    var hint = '';
+    if (!done && p.kind === 'deadline') {
+      var ds = PR.points.deadlineState(p);
+      hint = '<div class="sub" style="margin-top:2px">' + (ds.late
+        ? '<span style="color:var(--red)">마감 지남 · 지급 50%</span>'
+        : '지금 끝내면 조기 보너스 +' + Math.round(p.basePts * 0.3 * ds.earlyRatio) + 'P') + '</div>';
+    }
+    var h = '<div class="plan ' + (done ? 'done' : '') + '">' +
+      '<div class="grow">' +
+        '<div class="t">' + PR.esc(p.title) + '</div>' +
+        '<div style="margin-top:4px">' + PR.vh.planChips(p) + quota + '</div>' +
+        (done ? '' : '<div class="sub" style="margin-top:4px">완전 달성 시 <span class="pts">+' + expectFull(p) + 'P</span>' +
+          (p.time ? ' · ⏰정시 +' + Math.round(p.basePts * 0.3) + 'P' : '') + '</div>') + hint +
+      '</div>' +
+      (done
+        ? '<button class="gray small" data-undo="' + p.id + '">취소</button>'
+        : (hasTarget
+            ? '<button class="' + (openId === p.id ? 'gray' : '') + '" data-open="' + p.id + '">' + (openId === p.id ? '닫기' : '완료') + '</button>'
+            : '<button data-donex="' + p.id + '">완료</button>')) +
+    '</div>';
+    if (!done && hasTarget && openId === p.id) h += PR.vh.completeForm(p, 'c' + p.id);
+    return h;
+  }
+
+  PR.app.register('today', {
+    render: function () {
+      var S = PR.store.state;
+      var today = PR.todayStr();
+      var now = new Date();
+      var out = '<h2>' + (now.getMonth() + 1) + '월 ' + now.getDate() + '일 (' + PR.DAYS[now.getDay()] + ') 오늘</h2>';
+
+      /* 1. 오늘의 습관 (단순 토글) */
+      var habits = S.plans.filter(function (p) { return p.kind === 'habit' && PR.sched.isScheduledOn(p, today); });
+      if (habits.length) {
+        var hDone = habits.filter(function (p) { return PR.sched.todayLog(p.id); }).length;
+        out += '<div class="card"><div class="sub" style="margin-bottom:4px">🌱 습관 · ' + hDone + '/' + habits.length + '</div>' +
+          habits.map(function (p) {
+            var done = !!PR.sched.todayLog(p.id);
+            var st = PR.sched.planStreak(p);
+            return '<div class="plan ' + (done ? 'done' : '') + '">' +
+              '<div class="grow"><div class="t">' + PR.esc(p.title) + '</div>' +
+              '<div class="sub">🔥' + st.n + st.unit + ' · +' + p.basePts + 'P</div></div>' +
+              '<button class="' + (done ? 'gray ' : '') + 'small" data-hb="' + p.id + '">' + (done ? '✓ 완료' : '체크') + '</button>' +
+            '</div>';
+          }).join('') + '</div>';
+      }
+
+      /* 2. 1회성 (마감) — 반복보다 우선 노출 */
+      var dls = PR.sched.pendingDeadlines();
+      if (dls.length) {
+        out += '<div class="card"><div class="sub" style="margin-bottom:4px">📅 1회성 (마감)</div>' +
+          dls.map(planRow).join('') + '</div>';
+      }
+
+      /* 3. 반복적인 일 */
+      var routines = S.plans.filter(function (p) { return p.kind === 'routine' && PR.sched.isScheduledOn(p, today); });
+      if (routines.length) {
+        var doneN = routines.filter(function (p) { return PR.sched.todayLog(p.id); }).length;
+        out += '<div class="card"><div class="sub" style="margin-bottom:4px">🔁 반복적인 일 · 달성 ' + doneN + '/' + routines.length + '</div>' +
+          routines.map(planRow).join('') + '</div>';
+      }
+
+      /* 4. 프로젝트 다음 단계 */
+      var pjs = S.projects.filter(function (x) { return !x.done; });
+      if (pjs.length) {
+        out += '<div class="card"><div class="sub" style="margin-bottom:4px">🚩 프로젝트 — 다음 단계</div>' +
+          pjs.map(function (pj) {
+            var doneN = pj.milestones.filter(function (m) { return m.done; }).length;
+            var next = pj.milestones.find(function (m) { return !m.done; });
+            return '<div class="plan"><div class="grow">' +
+              '<div class="t">' + PR.esc(pj.title) + '</div>' +
+              PR.vh.progressBar(doneN, pj.milestones.length) +
+              (next ? '<div class="sub" style="margin-top:4px">다음: <b>' + PR.esc(next.title) + '</b> <span class="pts">+' + next.pts + 'P</span></div>' : '') +
+              (doneN === pj.milestones.length - 1 ? '<div class="sub">마지막 단계! 완주 보너스 +' + PR.points.projectBonus(pj).total + 'P</div>' : '') +
+            '</div>' +
+            (next ? '<button data-ms="' + pj.id + ':' + next.id + '">완료</button>' : '') +
+            '</div>';
+          }).join('') + '</div>';
+      }
+
+      if (!habits.length && !routines.length && !dls.length && !pjs.length) {
+        out += '<div class="card"><div class="empty">오늘 예정된 계획이 없어요.<br>📋 계획 탭에서 추가해 보세요!</div></div>';
+      }
+      /* 5. 번외 기록: 계획에 없던 일 */
+      var ads = S.logs.filter(function (l) { return l.adhoc && l.date === today; });
+      out += '<div class="card">' +
+        '<div style="font-weight:700">🔖 계획에 없던 일</div>' +
+        '<div class="sub" style="margin-top:2px">즉흥적으로 한 일도 기록하고 포인트 받기 — 계획한 일의 80%로 지급, 연속 달성 일수에는 안 들어가요</div>' +
+        '<div class="row" style="margin-top:8px">' +
+          '<input id="ad-title" style="flex:2" placeholder="무엇을 했나요?">' +
+          '<input id="ad-pts" type="number" min="1" placeholder="가치 P" style="width:80px">' +
+          '<button id="ad-add">기록</button>' +
+        '</div>' +
+        (ads.length ? '<div style="margin-top:8px">' + ads.map(function (l) {
+          return '<div class="hist"><span>🔖 ' + PR.esc(l.title || '') + ' <span class="pts">+' + l.pts + 'P</span></span>' +
+            '<button class="danger small" data-addel="' + l.id + '">✕</button></div>';
+        }).join('') + '</div>' : '') +
+      '</div>';
+
+      return out;
+    },
+
+    bind: function (root) {
+      root.onclick = function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        if (b.dataset.hb) { // 습관 토글
+          if (PR.sched.todayLog(b.dataset.hb)) PR.actions.uncompletePlan(b.dataset.hb);
+          else PR.actions.completePlan(b.dataset.hb, {});
+          return;
+        }
+        if (b.dataset.open) { openId = openId === b.dataset.open ? null : b.dataset.open; PR.app.render(); }
+        if (b.dataset.donex) { openId = null; PR.actions.completePlan(b.dataset.donex, {}); }
+        if (b.dataset.confirm) {
+          var id = b.dataset.confirm;
+          var tEl = document.getElementById('c' + id + '-t');
+          var qEl = document.getElementById('c' + id + '-q');
+          openId = null;
+          PR.actions.completePlan(id, { t: tEl ? tEl.value : 0, q: qEl ? qEl.value : 0 });
+        }
+        if (b.dataset.undo && confirm('완료를 취소할까요? 받은 포인트가 회수됩니다.')) PR.actions.uncompletePlan(b.dataset.undo);
+        if (b.id === 'ad-add') {
+          var adTitle = document.getElementById('ad-title').value.trim();
+          var adWorth = Number(document.getElementById('ad-pts').value);
+          if (!adTitle || !adWorth || adWorth < 1) { PR.toast('내용과 가치(P)를 입력해 주세요'); return; }
+          PR.actions.addAdhoc(adTitle, adWorth);
+        }
+        if (b.dataset.addel && confirm('이 기록을 삭제할까요? 받은 포인트가 회수됩니다.')) PR.actions.deleteAdhoc(b.dataset.addel);
+        if (b.dataset.ms) {
+          var pair = b.dataset.ms.split(':');
+          PR.actions.completeMilestone(pair[0], pair[1]);
+        }
+      };
+    },
+
+    onNavAway: function () { openId = null; }
+  });
+})(window.PR = window.PR || {});
+
+/* ===== components/plans.js ===== */
+/* 계획 탭: [1회성 (마감) | 반복] 세그먼트 + 종류별 전용 폼. 프로젝트는 전용 탭으로 분리 */
+(function (PR) {
+  'use strict';
+
+  var seg = 'deadline';  // 'deadline' | 'routine' — 1회성 목표 우선
+  var editing = null;    // 수정 중인 계획
+
+  var RUBRIC = '<div class="sub" style="margin-top:4px">💡 1P ≈ 100원. "남이 시키면 최소 얼마 받을까?" ÷ 100 — 의무(알바·출근·수업) 5~10P · 가볍고 재미있음 10~20P · 무난함 30~50P · 하기 싫고 머리 아픔 80~100P</div>';
+
+  function targetFields(p) {
+    return '<label>목표 (선택 · 비우면 O/X 체크)</label>' +
+      '<div class="row">' +
+        '<div class="grow"><label style="margin-top:0">⏱ 시간 (분)</label>' +
+          '<input id="f-tt" type="number" min="1" value="' + (p.targetT || '') + '" placeholder="예: 60"></div>' +
+        '<div class="grow"><label style="margin-top:0">🔢 분량</label>' +
+          '<input id="f-tq" type="number" min="1" value="' + (p.targetQ || '') + '" placeholder="예: 50"></div>' +
+        '<div class="grow"><label style="margin-top:0">단위</label>' +
+          '<input id="f-unit" placeholder="쪽/단어/문제" value="' + PR.esc(p.unitQ || '') + '"></div>' +
+      '</div>' +
+      '<div id="f-mode-wrap" class="hidden"><label>둘 다 입력됨 — 달성 기준</label>' +
+        '<select id="f-mode">' +
+          '<option value="or"' + (p.mode !== 'and' ? ' selected' : '') + '>둘 중 하나만 채우면 달성 (OR)</option>' +
+          '<option value="and"' + (p.mode === 'and' ? ' selected' : '') + '>둘 다 채워야 달성 (AND)</option>' +
+        '</select></div>';
+  }
+
+  function timeFields(p) {
+    return '<label>수행 시간대 (선택 · 이 시간 안에 완료하면 정시 보너스 +30%)</label>' +
+      '<div class="row">' +
+        '<div class="grow"><input id="f-time" type="time" value="' + (p.time || '') + '"></div>' +
+        '<div style="color:var(--sub)">~</div>' +
+        '<div class="grow"><input id="f-timeto" type="time" value="' + (p.timeTo || '') + '"></div>' +
+      '</div>' +
+      '<div class="sub" style="margin-top:4px">끝 시각을 비우면 시작 시각 ±30분 내 완료 시 보너스</div>';
+  }
+
+  function commonHead(p, label, ph) {
+    return '<div class="row">' +
+      '<div class="grow" style="flex:2"><label>' + label + '</label>' +
+        '<input id="f-title" placeholder="' + ph + '" value="' + PR.esc(p.title) + '"></div>' +
+      '<div class="grow"><label>기본 포인트</label>' +
+        '<input id="f-base" type="number" min="1" value="' + (p.basePts || '') + '" placeholder="30"></div>' +
+    '</div>' + RUBRIC +
+    '<label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:10px">' +
+      '<input type="checkbox" id="f-duty" style="width:auto"' + (p.duty ? ' checked' : '') + '>' +
+      '당연히 해야 하는 의무 (알바·출근·수업 — 스트릭 카운트 제외, 낮은 P 권장)</label>';
+  }
+
+  /* ---------------- 반복적인 일 폼 ---------------- */
+  function routineForm() {
+    var p = (editing && editing.kind === 'routine') ? editing
+      : { title: '', basePts: 30, duty: false, targetT: '', targetQ: '', unitQ: '', mode: 'or', time: '', timeTo: '', freq: { type: 'days', days: [] } };
+    var f = p.freq || { type: 'days', days: [] };
+    var dayBtns = PR.DAYS.map(function (d, i) {
+      return '<button type="button" class="' + ((f.days || []).indexOf(i) !== -1 ? 'on' : '') + '" data-day="' + i + '">' + d + '</button>';
+    }).join('');
+    return '<div class="card">' +
+      '<div style="font-weight:700; margin-bottom:2px">' + (editing ? '✏️ 수정' : '➕ 새 반복적인 일') + '</div>' +
+      commonHead(p, '이름', '예: 독서, 영어 공부, 알바') +
+      targetFields(p) +
+      timeFields(p) +
+      '<label>반복 방식</label>' +
+      '<div class="row">' +
+        '<button type="button" class="grow ' + (f.type !== 'weekly' ? '' : 'gray') + '" id="f-ftype-days">요일 고정</button>' +
+        '<button type="button" class="grow ' + (f.type === 'weekly' ? '' : 'gray') + '" id="f-ftype-weekly">주 n회</button>' +
+      '</div>' +
+      '<div id="f-days-wrap" class="' + (f.type === 'weekly' ? 'hidden' : '') + '">' +
+        '<label>요일 (선택 안 하면 매일)</label>' +
+        '<div class="daybtns" id="f-days">' + dayBtns + '</div>' +
+      '</div>' +
+      '<div id="f-weekly-wrap" class="' + (f.type === 'weekly' ? '' : 'hidden') + '">' +
+        '<label>주당 횟수</label>' +
+        '<input id="f-wn" type="number" min="1" max="7" value="' + (f.n || 3) + '">' +
+      '</div>' +
+      '<div class="row" style="margin-top:12px">' +
+        '<button id="f-save-routine" class="grow">' + (editing ? '수정 저장' : '추가') + '</button>' +
+        (editing ? '<button id="f-cancel" class="gray">취소</button>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  /* ---------------- 1회성 (마감) 폼 ---------------- */
+  function deadlineForm() {
+    var p = (editing && editing.kind === 'deadline') ? editing
+      : { title: '', basePts: 50, duty: false, targetT: '', targetQ: '', unitQ: '', mode: 'or', time: '', timeTo: '', deadline: '' };
+    return '<div class="card">' +
+      '<div style="font-weight:700; margin-bottom:2px">' + (editing ? '✏️ 수정' : '➕ 새 1회성 목표') + '</div>' +
+      commonHead(p, '이름', '예: 보고서 제출, 과제') +
+      targetFields(p) +
+      timeFields(p) +
+      '<label>마감일 (일찍 끝낼수록 보너스 ↑, 지나면 지급 50%)</label>' +
+      '<input id="f-deadline" type="date" value="' + (p.deadline || '') + '">' +
+      '<div class="row" style="margin-top:12px">' +
+        '<button id="f-save-deadline" class="grow">' + (editing ? '수정 저장' : '추가') + '</button>' +
+        (editing ? '<button id="f-cancel" class="gray">취소</button>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  function planList(kind) {
+    var S = PR.store.state;
+    var list = S.plans.filter(function (p) { return p.kind === kind; });
+    var items = list.length ? list.map(function (pl) {
+      return '<div class="plan ' + (pl.done ? 'done' : '') + '">' +
+        '<div class="grow">' +
+          '<div class="t">' + PR.esc(pl.title) + (pl.done ? ' <span class="chip d1">완료됨</span>' : '') + '</div>' +
+          '<div style="margin-top:4px">' + PR.vh.planChips(pl) + ' <span class="sub">기본 ' + pl.basePts + 'P</span></div>' +
+        '</div>' +
+        '<button class="ghost small" data-edit="' + pl.id + '">수정</button>' +
+        '<button class="danger small" data-del="' + pl.id + '">삭제</button>' +
+      '</div>';
+    }).join('') : '<div class="empty">아직 없어요</div>';
+    return '<div class="card">' + items + '</div>';
+  }
+
+  var RULES = '<div class="card sub" style="line-height:1.7">💡 <b>지급 규칙</b><br>' +
+    '지급 = 기본P × 달성률² (부분 달성은 깎여서: 50% 달성 → 25%)<br>' +
+    '완전 달성 시: 스트릭 +2%/일(최대 +50%) · 시간대 내 완료 +30%<br>' +
+    '초과 달성: 초과분의 절반 요율, 최대 +50%<br>' +
+    '의무 항목은 스트릭 카운트에서 제외</div>';
+
+  /* ---------------- 제출 ---------------- */
+  function readTargets() {
+    return {
+      targetT: Number(document.getElementById('f-tt').value) || null,
+      targetQ: Number(document.getElementById('f-tq').value) || null,
+      unitQ: (document.getElementById('f-unit').value || '').trim(),
+      mode: document.getElementById('f-mode').value
+    };
+  }
+
+  function submitCommon(kind) {
+    var title = document.getElementById('f-title').value.trim();
+    var base = Number(document.getElementById('f-base').value);
+    if (!title) { PR.toast('이름을 입력해 주세요'); return null; }
+    if (!base || base < 1) { PR.toast('기본 포인트를 입력해 주세요'); return null; }
+    return Object.assign({
+      id: editing ? editing.id : PR.uid(),
+      title: title, kind: kind, basePts: base,
+      duty: document.getElementById('f-duty').checked,
+      time: document.getElementById('f-time').value || '',
+      timeTo: document.getElementById('f-timeto').value || '',
+      freq: { type: 'days', days: [] }, deadline: '',
+      createdAt: editing ? (editing.createdAt || PR.todayStr()) : PR.todayStr(),
+      done: editing ? !!editing.done : false,
+      active: true
+    }, readTargets());
+  }
+
+  function submitRoutine() {
+    var p = submitCommon('routine');
+    if (!p) return;
+    var weekly = !document.getElementById('f-weekly-wrap').classList.contains('hidden');
+    p.freq = weekly
+      ? { type: 'weekly', n: Math.min(7, Math.max(1, Number(document.getElementById('f-wn').value) || 3)) }
+      : { type: 'days', days: Array.prototype.map.call(document.querySelectorAll('#f-days button.on'), function (b) { return Number(b.dataset.day); }) };
+    var isEdit = !!editing;
+    editing = null;
+    PR.actions.savePlan(p, isEdit);
+  }
+
+  function submitDeadline() {
+    var p = submitCommon('deadline');
+    if (!p) return;
+    p.deadline = document.getElementById('f-deadline').value || '';
+    if (!p.deadline) { PR.toast('마감일을 입력해 주세요'); return; }
+    var isEdit = !!editing;
+    editing = null;
+    PR.actions.savePlan(p, isEdit);
+  }
+
+  /* ---------------- 컴포넌트 ---------------- */
+  PR.app.register('plans', {
+    render: function () {
+      var segBtns = '<div class="row" style="margin-bottom:10px">' +
+        '<button class="grow small ' + (seg === 'deadline' ? '' : 'gray') + '" data-seg="deadline">📅 1회성 (마감)</button>' +
+        '<button class="grow small ' + (seg === 'routine' ? '' : 'gray') + '" data-seg="routine">🔁 반복</button></div>';
+      var body = seg === 'deadline' ? deadlineForm() + planList('deadline') + RULES
+        : routineForm() + planList('routine') + RULES;
+      return '<h2>계획 관리</h2>' + segBtns + body;
+    },
+
+    bind: function (root) {
+      root.onclick = function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        if (b.dataset.seg) { seg = b.dataset.seg; editing = null; PR.app.render(); return; }
+        if (b.dataset.day !== undefined && b.dataset.day !== '') { b.classList.toggle('on'); return; }
+        if (b.id === 'f-ftype-days' || b.id === 'f-ftype-weekly') {
+          var weekly = b.id === 'f-ftype-weekly';
+          document.getElementById('f-days-wrap').classList.toggle('hidden', weekly);
+          document.getElementById('f-weekly-wrap').classList.toggle('hidden', !weekly);
+          document.getElementById('f-ftype-days').className = 'grow ' + (weekly ? 'gray' : '');
+          document.getElementById('f-ftype-weekly').className = 'grow ' + (weekly ? '' : 'gray');
+          return;
+        }
+        if (b.id === 'f-save-routine') submitRoutine();
+        if (b.id === 'f-save-deadline') submitDeadline();
+        if (b.id === 'f-cancel') { editing = null; PR.app.render(); }
+        if (b.dataset.edit) {
+          editing = JSON.parse(JSON.stringify(PR.store.state.plans.find(function (p) { return p.id === b.dataset.edit; })));
+          seg = editing.kind === 'deadline' ? 'deadline' : 'routine';
+          PR.app.render();
+        }
+        if (b.dataset.del && confirm('삭제할까요? (기록은 유지됩니다)')) PR.actions.deletePlan(b.dataset.del);
+      };
+
+      /* T/Q 둘 다 입력 시 모드 선택 표시 */
+      var tt = document.getElementById('f-tt');
+      if (tt) {
+        var updMode = function () {
+          var both = document.getElementById('f-tt').value && document.getElementById('f-tq').value;
+          document.getElementById('f-mode-wrap').classList.toggle('hidden', !both);
+        };
+        tt.oninput = updMode;
+        document.getElementById('f-tq').oninput = updMode;
+        updMode();
+      }
+    },
+
+    onNavAway: function () { editing = null; }
+  });
+})(window.PR = window.PR || {});
+
+/* ===== components/projects.js ===== */
+/* 프로젝트 탭: 마일스톤 관리 (계획 탭에서 분리) */
+(function (PR) {
+  'use strict';
+
+  function projForm() {
+    return '' +
+      '<div class="card">' +
+        '<div style="font-weight:700; margin-bottom:2px">🚩 새 프로젝트</div>' +
+        '<div class="sub" style="margin-top:4px; line-height:1.6">크고 막연한 일을 단계로 쪼개세요. 단계에 총액의 60~70%, 완주 보너스에 30~40% 배분을 권장. 단계 포인트는 시작할 때 확정하는 게 원칙!</div>' +
+        '<label>프로젝트 이름</label>' +
+        '<input id="pj-title" placeholder="예: 포트폴리오 완성">' +
+        '<div class="row">' +
+          '<div class="grow"><label>완주 보너스 (P)</label>' +
+            '<input id="pj-bonus" type="number" min="0" placeholder="예: 200"></div>' +
+          '<div class="grow"><label>마감 (선택 · 조기 완주 보너스 ↑)</label>' +
+            '<input id="pj-deadline" type="date"></div>' +
+        '</div>' +
+        '<label>단계 (마일스톤)</label>' +
+        '<div id="pj-rows"></div>' +
+        '<button type="button" id="pj-addrow" class="ghost small" style="margin-top:6px">+ 단계 추가</button>' +
+        '<button id="pj-save" style="margin-top:12px; width:100%">프로젝트 시작</button>' +
+      '</div>';
+  }
+
+  function projList() {
+    var S = PR.store.state;
+    if (!S.projects.length) return '<div class="card"><div class="empty">진행 중인 프로젝트가 없어요</div></div>';
+    return S.projects.map(function (pj) {
+      var doneN = pj.milestones.filter(function (m) { return m.done; }).length;
+      var ms = pj.milestones.map(function (m) {
+        return '<div class="hist"><span>' + (m.done ? '✅' : '⬜') + ' ' + PR.esc(m.title) + ' <span class="pts">+' + m.pts + 'P</span></span>' +
+          (pj.done ? '' : (m.done
+            ? '<button class="gray small" data-msundo="' + pj.id + ':' + m.id + '">취소</button>'
+            : '<button class="small" data-msdo="' + pj.id + ':' + m.id + '">완료</button>')) +
+        '</div>';
+      }).join('');
+      return '<div class="card">' +
+        '<div class="row"><div class="grow">' +
+          '<div class="t" style="font-weight:700">' + (pj.done ? '🏆 ' : '🚩 ') + PR.esc(pj.title) + '</div>' +
+          '<div class="sub">완주 보너스 ' + pj.bonusPts + 'P' + (pj.deadline ? ' · 마감 ' + pj.deadline : '') + (pj.done ? ' · ' + pj.doneDate + ' 완주' : '') + '</div>' +
+        '</div>' +
+        '<button class="danger small" data-pjdel="' + pj.id + '">삭제</button></div>' +
+        PR.vh.progressBar(doneN, pj.milestones.length) +
+        '<div style="margin-top:6px">' + ms + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function addMsRow(container) {
+    var row = document.createElement('div');
+    row.className = 'row msrow';
+    row.style.marginTop = '6px';
+    row.innerHTML = '<input class="ms-title grow" placeholder="단계 이름">' +
+      '<input class="ms-pts" type="number" min="1" placeholder="P" style="width:70px">' +
+      '<button type="button" class="danger small ms-del">✕</button>';
+    row.querySelector('.ms-del').onclick = function () { row.remove(); };
+    container.appendChild(row);
+  }
+
+  function submitProject() {
+    var title = document.getElementById('pj-title').value.trim();
+    if (!title) { PR.toast('프로젝트 이름을 입력해 주세요'); return; }
+    var ms = [];
+    document.querySelectorAll('#pj-rows .msrow').forEach(function (row) {
+      var t = row.querySelector('.ms-title').value.trim();
+      var pts = Number(row.querySelector('.ms-pts').value);
+      if (t && pts > 0) ms.push({ id: PR.uid(), title: t, pts: Math.round(pts), done: false, date: '' });
+    });
+    if (!ms.length) { PR.toast('단계를 1개 이상 입력해 주세요'); return; }
+    PR.actions.saveProject({
+      id: PR.uid(), title: title,
+      bonusPts: Math.max(0, Number(document.getElementById('pj-bonus').value) || 0),
+      deadline: document.getElementById('pj-deadline').value || '',
+      createdAt: PR.todayStr(), done: false, doneDate: '',
+      milestones: ms
+    });
+  }
+
+  PR.app.register('proj', {
+    render: function () {
+      return '<h2>프로젝트</h2>' + projForm() + projList();
+    },
+
+    bind: function (root) {
+      root.onclick = function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        if (b.id === 'pj-addrow') addMsRow(document.getElementById('pj-rows'));
+        if (b.id === 'pj-save') submitProject();
+        if (b.dataset.pjdel && confirm('이 프로젝트를 삭제할까요? (기록은 유지됩니다)')) PR.actions.deleteProject(b.dataset.pjdel);
+        if (b.dataset.msdo) { var a = b.dataset.msdo.split(':'); PR.actions.completeMilestone(a[0], a[1]); }
+        if (b.dataset.msundo && confirm('이 단계를 취소할까요? 받은 포인트가 회수됩니다.')) {
+          var u = b.dataset.msundo.split(':'); PR.actions.uncompleteMilestone(u[0], u[1]);
+        }
+      };
+      var rows = document.getElementById('pj-rows');
+      if (rows && !rows.children.length) { addMsRow(rows); addMsRow(rows); addMsRow(rows); }
+    }
+  });
+})(window.PR = window.PR || {});
+
+/* ===== components/shop.js ===== */
+/* 보상 탭: 보상 등록/구매 + 구매 내역 */
+(function (PR) {
+  'use strict';
+
+  PR.app.register('shop', {
+    render: function () {
+      var S = PR.store.state;
+      var form = '<div class="card">' +
+        '<div style="font-weight:700">🎁 보상 등록</div>' +
+        '<label>보상 이름</label><input id="r-name" placeholder="예: 유튜브 30분, 치킨 시키기, 게임 1시간">' +
+        '<label>가격 (P)</label><input id="r-cost" type="number" min="1" placeholder="100">' +
+        '<button id="r-add" style="margin-top:10px; width:100%">등록</button>' +
+      '</div>';
+
+      var list = S.rewards.length ? S.rewards.map(function (r) {
+        return '<div class="plan">' +
+          '<div class="grow"><div class="t">' + PR.esc(r.name) + '</div><div class="sub pts">' + r.cost.toLocaleString() + ' P</div></div>' +
+          '<button class="small" data-buy="' + r.id + '"' + (S.points < r.cost ? ' disabled' : '') + '>구매</button>' +
+          '<button class="danger small" data-rdel="' + r.id + '">✕</button>' +
+        '</div>';
+      }).join('') : '<div class="empty">보상을 등록해 보세요!<br>동기부여가 되는 것일수록 좋아요 🎯</div>';
+
+      var hist = S.purchases.slice().reverse().slice(0, 30).map(function (h) {
+        return '<div class="hist"><span>🛍 ' + PR.esc(h.name) + '</span><span class="sub">' + h.date + ' · -' + h.cost + 'P</span></div>';
+      }).join('');
+
+      return '<h2>보상 상점</h2>' + form + '<div class="card">' + list + '</div>' +
+        (hist ? '<div class="card"><details><summary>구매 내역 (' + S.purchases.length + ')</summary>' + hist + '</details></div>' : '');
+    },
+
+    bind: function (root) {
+      root.onclick = function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        if (b.id === 'r-add') {
+          var name = document.getElementById('r-name').value.trim();
+          var cost = Math.max(1, Number(document.getElementById('r-cost').value) || 0);
+          if (!name || !cost) { PR.toast('이름과 가격을 입력해 주세요'); return; }
+          PR.actions.addReward(name, cost);
+        }
+        if (b.dataset.buy) {
+          var r = PR.store.state.rewards.find(function (x) { return x.id === b.dataset.buy; });
+          if (r && confirm('"' + r.name + '" 을(를) ' + r.cost + 'P로 구매할까요?')) PR.actions.buyReward(b.dataset.buy);
+        }
+        if (b.dataset.rdel && confirm('이 보상을 삭제할까요?')) PR.actions.deleteReward(b.dataset.rdel);
+      };
+    }
+  });
+})(window.PR = window.PR || {});
+
+/* ===== components/stats.js ===== */
+(function (PR) {
+  'use strict';
+
+  PR.app.register('stats', {
+    render: function () {
+      var S = PR.store.state;
+
+      var days = [];
+      for (var i = 6; i >= 0; i--) {
+        var d = new Date(); d.setDate(d.getDate() - i);
+        days.push(PR.todayStr(d));
+      }
+      var daily = days.map(function (ds) {
+        return S.logs.filter(function (l) { return l.date === ds; })
+          .reduce(function (a, l) { return a + l.pts; }, 0);
+      });
+      var max = Math.max.apply(null, daily.concat([10]));
+      var W = 480, H = 170, bw = W / 7;
+      var bars = daily.map(function (v, i) {
+        var h = v / max * 120;
+        var dd = new Date(days[i] + 'T12:00:00');
+        return '<rect x="' + (i * bw + 10) + '" y="' + (140 - h) + '" width="' + (bw - 20) + '" height="' + Math.max(h, 2) + '" rx="6" fill="' + (i === 6 ? 'var(--accent)' : '#c9cbee') + '"/>' +
+          '<text x="' + (i * bw + bw / 2) + '" y="' + (132 - h) + '" text-anchor="middle" font-size="11" fill="#888">' + (v || '') + '</text>' +
+          '<text x="' + (i * bw + bw / 2) + '" y="160" text-anchor="middle" font-size="11" fill="#aaa">' + (dd.getMonth() + 1) + '/' + dd.getDate() + '</text>';
+      }).join('');
+
+      var sched = 0, done = 0;
+      for (var j = 0; j < 30; j++) {
+        var d2 = new Date(); d2.setDate(d2.getDate() - j);
+        var ds2 = PR.todayStr(d2);
+        S.plans.forEach(function (p) {
+          if ((p.kind !== 'habit' && p.kind !== 'routine') || (p.freq && p.freq.type === 'weekly')) return;
+          if (!PR.sched.isScheduledOn(p, ds2)) return;
+          sched++;
+          if (S.logs.some(function (l) { return l.planId === p.id && l.date === ds2 && l.full; })) done++;
+        });
+      }
+      for (var w = 0; w < 4; w++) {
+        var wd = new Date(); wd.setDate(wd.getDate() - w * 7);
+        var wk = PR.weekKey(PR.todayStr(wd));
+        S.plans.forEach(function (p) {
+          if ((p.kind !== 'habit' && p.kind !== 'routine') || !p.freq || p.freq.type !== 'weekly') return;
+          sched += p.freq.n;
+          done += Math.min(PR.sched.weekFullCount(p.id, wk), p.freq.n);
+        });
+      }
+      var rate = sched ? Math.round(done / sched * 100) : 0;
+      var weekPts = daily.reduce(function (a, b) { return a + b; }, 0);
+      var spent = S.purchases.reduce(function (a, p) { return a + p.cost; }, 0);
+      var pjDone = S.projects.filter(function (p) { return p.done; }).length;
+      var completions = S.logs.filter(function (l) { return !l.penalty; }).length;
+      var docked = S.logs.filter(function (l) { return l.penalty; }).reduce(function (a, l) { return a - l.pts; }, 0);
+
+      return '<h2>통계</h2>' +
+        '<div class="stat3">' +
+          '<div class="card"><div class="n">' + rate + '%</div><div class="sub">30일 달성률</div></div>' +
+          '<div class="card"><div class="n pts">' + weekPts + '</div><div class="sub">7일 획득 P</div></div>' +
+          '<div class="card"><div class="n">' + completions + '</div><div class="sub">총 완료 횟수</div></div>' +
+        '</div>' +
+        '<div class="card" style="margin-top:10px">' +
+          '<div style="font-weight:700; margin-bottom:6px">최근 7일 획득 포인트</div>' +
+          '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%">' + bars + '</svg>' +
+        '</div>' +
+        '<div class="card">' +
+          '<div class="hist"><span>🔥 현재 스트릭</span><b>' + PR.points.computeStreak(false) + '일</b></div>' +
+          '<div class="hist"><span>🏆 최고 스트릭</span><b>' + S.bestStreak + '일</b></div>' +
+          '<div class="hist"><span>🛡 방어막</span><b>' + (S.freezes || 0) + '개</b></div>' +
+          '<div class="hist"><span>🚩 완주한 프로젝트</span><b>' + pjDone + '개</b></div>' +
+          '<div class="hist"><span>💰 누적 획득</span><b>' + S.earned.toLocaleString() + 'P</b></div>' +
+          '<div class="hist"><span>🛍 보상에 사용</span><b>' + spent.toLocaleString() + 'P</b></div>' +
+          (docked ? '<div class="hist"><span>🥶 놓쳐서 차감</span><b>' + docked.toLocaleString() + 'P</b></div>' : '') +
+        '</div>';
+    }
+  });
+})(window.PR = window.PR || {});
+
+/* ===== components/settings.js ===== */
+(function (PR) {
+  'use strict';
+
+  PR.app.register('setting', {
+    render: function () {
+      var S = PR.store.state;
+      var fsa = PR.sync.supported();
+      return '<h2>설정 · 데이터</h2>' +
+        '<div class="card">' +
+          '<div style="font-weight:700; margin-bottom:8px">📱↔💻 기기 간 동기화</div>' +
+          '<div class="sub" style="line-height:1.7; margin-bottom:10px">' +
+            '데이터는 이 브라우저에 자동 저장돼요.<br>' +
+            '다른 기기와 맞추려면 <b>내보내기 → (Syncthing/클라우드로 파일 전달) → 가져오기</b>를 사용하세요.<br>' +
+            (fsa
+              ? 'PC에서는 아래 <b>파일 연결</b>을 하면 변경될 때마다 그 파일에 자동 저장됩니다. Syncthing 폴더 안의 파일을 연결하면 폰으로 자동 전송돼요.'
+              : '이 브라우저는 파일 자동 저장을 지원하지 않아 수동 내보내기/가져오기를 사용하세요.') +
+          '</div>' +
+          '<div class="row" style="flex-wrap:wrap">' +
+            '<button id="s-export" class="grow">📤 내보내기</button>' +
+            '<button id="s-import" class="ghost grow">📥 가져오기</button>' +
+            (fsa ? '<button id="s-link" class="ghost grow">🔗 파일 연결' + (PR.sync.hasHandle() ? ' 됨 ✓' : '') + '</button>' : '') +
+          '</div>' +
+          '<input type="file" id="s-file" accept=".json" class="hidden">' +
+        '</div>' +
+        '<div class="card">' +
+          '<div style="font-weight:700; margin-bottom:8px">🎯 보상 규칙</div>' +
+          '<div class="row" style="align-items:center; justify-content:space-between">' +
+            '<div class="sub" style="line-height:1.6; flex:1">예정된 계획을 놓친 날 소액 차감<br>' +
+              '<span style="opacity:.7">방어막이 있으면 차감 대신 방어막이 쓰여요</span></div>' +
+            '<button id="s-penalty" class="' + (S.penaltyOn ? '' : 'ghost') + ' small">' + (S.penaltyOn ? '켜짐' : '꺼짐') + '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="card">' +
+          '<div style="font-weight:700; margin-bottom:8px">📲 폰에서 앱처럼 쓰기</div>' +
+          '<div class="sub" style="line-height:1.7">이 HTML 파일을 폰으로 보내 브라우저로 연 뒤, 메뉴에서 <b>"홈 화면에 추가"</b>를 누르면 앱 아이콘처럼 쓸 수 있어요.</div>' +
+        '</div>' +
+        '<div class="card">' +
+          '<button id="s-reset" class="danger" style="width:100%">전체 데이터 초기화</button>' +
+        '</div>' +
+        '<div class="sub" style="text-align:center; margin-top:6px">마지막 저장: ' + (S.lastMod ? new Date(S.lastMod).toLocaleString('ko-KR') : '없음') + '</div>';
+    },
+
+    bind: function (root) {
+      root.onclick = function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        if (b.id === 's-penalty') PR.actions.setPenalty(!PR.store.state.penaltyOn);
+        if (b.id === 's-export') PR.sync.exportData();
+        if (b.id === 's-import') document.getElementById('s-file').click();
+        if (b.id === 's-link') PR.sync.linkFile();
+        if (b.id === 's-reset' && confirm('정말 모든 데이터를 삭제할까요?') && confirm('되돌릴 수 없어요. 진행할까요?')) PR.actions.resetAll();
+      };
+      var fi = document.getElementById('s-file');
+      if (fi) fi.onchange = function (e) {
+        var f = e.target.files[0];
+        if (f) PR.sync.importFile(f);
+        e.target.value = '';
+      };
+    }
+  });
+})(window.PR = window.PR || {});
+
+/* ===== core/boot.js ===== */
+/* 부트스트랩: 모든 컴포넌트 등록 후 앱 시작 */
+(function (PR) {
+  'use strict';
+  PR.app.init();
+})(window.PR = window.PR || {});
+</script>
+</body>
+</html>
