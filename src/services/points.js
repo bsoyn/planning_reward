@@ -71,6 +71,19 @@
 
   function streakBonus(s) { return Math.min(s * 0.02, 0.5); }
 
+  /* 주어진 시각(분 단위)이 계획의 수행 시간대 안인지 */
+  function inWindow(p, cur) {
+    if (!p.time) return false;
+    var hm = p.time.split(':').map(Number);
+    var from = hm[0] * 60 + hm[1];
+    if (p.timeTo) {
+      var hm2 = p.timeTo.split(':').map(Number);
+      var to = hm2[0] * 60 + hm2[1];
+      return to >= from ? (cur >= from && cur <= to) : (cur >= from || cur <= to); // 자정 넘김 허용
+    }
+    return Math.abs(cur - from) <= 30;
+  }
+
   /* 마감형 조기/지각 판정. {earlyRatio: 0~1, late: bool} */
   function deadlineState(p, todayStr) {
     if (!p.deadline) return { earlyRatio: 0, late: false };
@@ -81,9 +94,14 @@
     return { earlyRatio: Math.min(left / total, 1), late: false };
   }
 
-  /* 완료 시 지급 계산. now는 테스트 주입용 */
+  /* 완료 시 지급 계산. now는 테스트 주입용.
+     input.date(YYYY-MM-DD)가 오늘 이전이면 "소급 기록": 실제 완료일 기준으로
+     지각 여부를 판정하되, 스트릭·정시·서프라이즈 보너스는 붙지 않는다. */
   function calcAward(p, input, now) {
     now = now || new Date();
+    var doneDate = (input && input.date) ? input.date : PR.todayStr();
+    if (doneDate > PR.todayStr()) doneDate = PR.todayStr(); // 미래 불가
+    var retro = doneDate < PR.todayStr();
     var base = p.basePts;
     var r = ratio(p, input);
     var rc = Math.min(r, 1);
@@ -91,25 +109,20 @@
 
     /* 의무 항목은 스트릭에 기여하지 않으므로 현재 스트릭 기준으로만 보너스 적용 */
     var s = computeStreak(!p.duty);
-    var sb = full ? streakBonus(s) : 0;
+    var sb = (full && !retro) ? streakBonus(s) : 0;
     /* 부분 달성 완화(r²→r^1.5) + 착수 최저보상: 조금이라도 하면 최소 10% 보장.
        "완벽 못 하면 시작도 안 함"을 줄임 (완전 달성은 그대로 100%). */
     var eff = full ? 1 : Math.max(Math.pow(rc, 1.5), rc > 0 ? 0.1 : 0);
     var main = Math.round(base * eff * (1 + sb));
 
     var onTime = false, otPts = 0;
+    /* 정시 판정: 완료 폼의 체크(input.ontime)가 있으면 그 값을 신뢰,
+       없으면 지금 시각으로 판정. 소급 기록은 체크한 경우에만 인정 */
     if (full && p.time) {
-      var cur = now.getHours() * 60 + now.getMinutes();
-      var hm = p.time.split(':').map(Number);
-      var from = hm[0] * 60 + hm[1];
       var ok;
-      if (p.timeTo) { // 시간대 지정: 시작~끝 안에 완료
-        var hm2 = p.timeTo.split(':').map(Number);
-        var to = hm2[0] * 60 + hm2[1];
-        ok = to >= from ? (cur >= from && cur <= to) : (cur >= from || cur <= to); // 자정 넘김 허용
-      } else { // 시각만 지정: ±30분
-        ok = Math.abs(cur - from) <= 30;
-      }
+      if (input && input.ontime !== undefined) ok = !!input.ontime;
+      else if (retro) ok = false;
+      else ok = inWindow(p, now.getHours() * 60 + now.getMinutes());
       if (ok) { onTime = true; otPts = Math.round(base * 0.3); }
     }
 
@@ -117,7 +130,7 @@
 
     var early = 0, late = false;
     if (p.kind === 'deadline') {
-      var ds = deadlineState(p);
+      var ds = deadlineState(p, doneDate); // 실제 완료일 기준 판정
       late = ds.late;
       if (full && !late) early = Math.round(base * 0.3 * ds.earlyRatio);
     }
@@ -126,7 +139,8 @@
     if (late) total = Math.round(total * 0.5);
 
     return { total: total, main: main, otPts: otPts, over: over, early: early,
-             late: late, onTime: onTime, r: r, full: full, streak: s, sb: sb };
+             late: late, onTime: onTime, r: r, full: full, streak: s, sb: sb,
+             retro: retro, doneDate: doneDate };
   }
 
   /* 서프라이즈 보너스: 완전 달성 시 낮은 확률로 추가 지급 (변동비율 강화).
@@ -154,6 +168,7 @@
     obligationOn: obligationOn,
     computeStreak: computeStreak,
     streakBonus: streakBonus,
+    inWindow: inWindow,
     deadlineState: deadlineState,
     calcAward: calcAward,
     rollSurprise: rollSurprise,

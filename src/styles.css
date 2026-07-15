@@ -65,7 +65,7 @@ details summary{cursor:pointer; font-weight:700; font-size:14px; padding:4px 0}
 /* v2: 프로젝트 진행률 바, 완료 입력 폼 */
 .pbar{height:7px; background:#ececf2; border-radius:4px; margin-top:7px; overflow:hidden}
 .pbar>div{height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:4px}
-.cform{display:flex; gap:8px; align-items:flex-end; background:#f6f6fb; border-radius:10px; padding:10px; margin:4px 0 8px}
+.cform{display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; background:#f6f6fb; border-radius:10px; padding:10px; margin:4px 0 8px}
 .cform label{margin-top:0}
 .msrow input{min-width:0}
 
@@ -75,5 +75,27 @@ details summary{cursor:pointer; font-weight:700; font-size:14px; padding:4px 0}
 .hcell{width:26px; height:26px; border-radius:8px; background:#ececf2; display:flex; align-items:center; justify-content:center; font-size:13px; color:#fff; padding:0; margin:0 auto}
 .hcell.done{background:var(--green)}
 .hcell.off{opacity:.3}
-button.hcell.today{outline:2px solid var(--accent2); cursor:pointer; background:#ececf2}
+button.hcell{cursor:pointer; background:#ececf2}
+button.hcell.done{background:var(--green)}
+button.hcell.today{outline:2px solid var(--accent2); background:#ececf2}
 button.hcell.today.done{background:var(--green)}
+
+/* v5: 달력 */
+.calhead{display:flex; align-items:center; justify-content:space-between; margin-bottom:8px}
+.calhead .row{gap:5px}
+.calgrid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px}
+.calwd{text-align:center; font-size:11px; color:var(--sub); padding:2px 0}
+.cal-cell{min-height:44px; border-radius:10px; background:#f6f6fb; padding:5px 0 3px; text-align:center; font-size:12.5px; font-weight:600; color:var(--ink); border:none; display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer}
+.cal-cell.blank{background:transparent; cursor:default}
+.cal-cell.today{outline:2px solid var(--accent2)}
+.cal-cell.sel{box-shadow:inset 0 0 0 2px var(--accent)}
+.cal-cell.ok{background:#e7f6ee}
+.cal-cell.miss{background:#fdeaea}
+.cal-cell.frozen{background:#e7f0fd}
+.cdots{display:flex; gap:2px; height:5px}
+.cd{width:5px; height:5px; border-radius:50%; background:#b8b8cc}
+.cd.r{background:var(--red)}
+.cd.dl{background:var(--gold)}
+.cd.dld{background:var(--green)}
+.cal-lg{display:inline-block; width:10px; height:10px; border-radius:3px; margin:0 3px 0 6px; vertical-align:-1px}
+.cal-lg.ok{background:#e7f6ee} .cal-lg.miss{background:#fdeaea} .cal-lg.frozen{background:#e7f0fd}

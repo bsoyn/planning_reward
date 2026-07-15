@@ -10,7 +10,11 @@
 
   function planRow(p) {
     var done = !!PR.sched.todayLog(p.id);
-    var hasTarget = p.targetT || p.targetQ;
+    var n0 = new Date();
+    var outOfWindow = p.time && !PR.points.inWindow(p, n0.getHours() * 60 + n0.getMinutes());
+    /* 폼이 필요한 경우: 실제 수행량 입력(목표), 완료일 입력(마감형),
+       시간대 밖 완료(정시 여부 확인). 시간대 안이면 자동 인정이라 물어보지 않음 */
+    var needForm = p.targetT || p.targetQ || p.kind === 'deadline' || outOfWindow;
     var quota = '';
     if (p.kind === 'routine' && p.freq && p.freq.type === 'weekly') {
       var k = PR.sched.weekFullCount(p.id);
@@ -32,11 +36,11 @@
       '</div>' +
       (done
         ? '<button class="gray small" data-undo="' + p.id + '">취소</button>'
-        : (hasTarget
+        : (needForm
             ? '<button class="' + (openId === p.id ? 'gray' : '') + '" data-open="' + p.id + '">' + (openId === p.id ? '닫기' : '완료') + '</button>'
             : '<button data-donex="' + p.id + '">완료</button>')) +
     '</div>';
-    if (!done && hasTarget && openId === p.id) h += PR.vh.completeForm(p, 'c' + p.id);
+    if (!done && needForm && openId === p.id) h += PR.vh.completeForm(p, 'c' + p.id);
     return h;
   }
 
@@ -133,8 +137,11 @@
           var id = b.dataset.confirm;
           var tEl = document.getElementById('c' + id + '-t');
           var qEl = document.getElementById('c' + id + '-q');
+          var dEl = document.getElementById('c' + id + '-d');
+          var tmEl = document.getElementById('c' + id + '-tm');
           openId = null;
-          PR.actions.completePlan(id, { t: tEl ? tEl.value : 0, q: qEl ? qEl.value : 0 });
+          PR.actions.completePlan(id, { t: tEl ? tEl.value : 0, q: qEl ? qEl.value : 0,
+            date: dEl ? dEl.value : undefined, ontime: tmEl ? tmEl.checked : undefined });
         }
         if (b.dataset.undo && confirm('완료를 취소할까요? 받은 포인트가 회수됩니다.')) PR.actions.uncompletePlan(b.dataset.undo);
         if (b.id === 'ad-add') {

@@ -42,9 +42,12 @@
         var done = !!logsBy[p.id + '|' + ds];
         var sched = PR.sched.isScheduledOn(p, ds);
         if (ds === today) {
-          return '<button class="hcell today ' + (done ? 'done' : '') + '" data-hb="' + p.id + '">' + (done ? '✓' : '') + '</button>';
+          return '<button class="hcell today ' + (done ? 'done' : '') + '" data-hb="' + p.id + '" data-hbd="' + ds + '">' + (done ? '✓' : '') + '</button>';
         }
-        return '<div class="hcell ' + (done ? 'done' : sched ? '' : 'off') + '">' + (done ? '✓' : '') + '</div>';
+        if (sched) { // 지난 날도 체크/해제 가능 (소급: 보너스 없이 지급, 스트릭 날짜는 인정)
+          return '<button class="hcell ' + (done ? 'done' : '') + '" data-hb="' + p.id + '" data-hbd="' + ds + '">' + (done ? '✓' : '') + '</button>';
+        }
+        return '<div class="hcell off">' + (done ? '✓' : '') + '</div>';
       }).join('');
       return '<div class="hgrid"><div style="min-width:0">' +
         '<div class="t" style="font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">' + PR.esc(p.title) + '</div>' +
@@ -53,7 +56,7 @@
     }).join('');
 
     return '<div class="card">' + head + rows +
-      '<div class="sub" style="margin-top:8px">오늘 칸을 눌러 체크/해제 · 흐린 칸은 예정일 아님</div></div>';
+      '<div class="sub" style="margin-top:8px">칸을 눌러 체크/해제 — 지난 날도 가능 (소급은 보너스 없이 지급) · 흐린 칸은 예정일 아님</div></div>';
   }
 
   function formHtml() {
@@ -136,9 +139,11 @@
       root.onclick = function (e) {
         var b = e.target.closest('button');
         if (!b) return;
-        if (b.dataset.hb) { // 오늘 칸 토글
-          if (PR.sched.todayLog(b.dataset.hb)) PR.actions.uncompletePlan(b.dataset.hb);
-          else PR.actions.completePlan(b.dataset.hb, {});
+        if (b.dataset.hb) { // 날짜 칸 토글 (오늘 + 지난 7일)
+          var ds = b.dataset.hbd || PR.todayStr();
+          var has = PR.store.state.logs.some(function (l) { return l.planId === b.dataset.hb && l.date === ds; });
+          if (has) PR.actions.uncompletePlan(b.dataset.hb, ds);
+          else PR.actions.completePlan(b.dataset.hb, { date: ds });
           return;
         }
         if (b.dataset.day !== undefined && b.dataset.day !== '') { b.classList.toggle('on'); return; }

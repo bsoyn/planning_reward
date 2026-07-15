@@ -2,8 +2,16 @@
 (function (PR) {
   'use strict';
 
-  var seg = 'deadline';  // 'deadline' | 'routine' — 1회성 목표 우선
+  var seg = 'deadline';  // 'deadline' | 'routine' | 'habit' | 'proj' — 1회성 목표 우선
   var editing = null;    // 수정 중인 계획
+
+  function switchSeg(next) {
+    var v = PR.app.views[seg];
+    if (v && v.onNavAway) v.onNavAway();
+    editing = null;
+    seg = next;
+    PR.app.render();
+  }
 
   var RUBRIC = '<div class="sub" style="margin-top:4px">💡 1P ≈ 100원. "남이 시키면 최소 얼마 받을까?" ÷ 100 — 의무(알바·출근·수업) 5~10P · 가볍고 재미있음 10~20P · 무난함 30~50P · 하기 싫고 머리 아픔 80~100P</div>';
 
@@ -106,6 +114,7 @@
           '<div class="t">' + PR.esc(pl.title) + (pl.done ? ' <span class="chip d1">완료됨</span>' : '') + '</div>' +
           '<div style="margin-top:4px">' + PR.vh.planChips(pl) + ' <span class="sub">기본 ' + pl.basePts + 'P</span></div>' +
         '</div>' +
+        (pl.done ? '<button class="gray small" data-undone="' + pl.id + '">완료 취소</button>' : '') +
         '<button class="ghost small" data-edit="' + pl.id + '">수정</button>' +
         '<button class="danger small" data-del="' + pl.id + '">삭제</button>' +
       '</div>';
@@ -173,18 +182,37 @@
   PR.app.register('plans', {
     render: function () {
       var segBtns = '<div class="row" style="margin-bottom:10px">' +
-        '<button class="grow small ' + (seg === 'deadline' ? '' : 'gray') + '" data-seg="deadline">📅 1회성 (마감)</button>' +
-        '<button class="grow small ' + (seg === 'routine' ? '' : 'gray') + '" data-seg="routine">🔁 반복</button></div>';
-      var body = seg === 'deadline' ? deadlineForm() + planList('deadline') + RULES
-        : routineForm() + planList('routine') + RULES;
+        '<button class="grow small ' + (seg === 'deadline' ? '' : 'gray') + '" data-seg="deadline">📅 1회성</button>' +
+        '<button class="grow small ' + (seg === 'routine' ? '' : 'gray') + '" data-seg="routine">🔁 반복</button>' +
+        '<button class="grow small ' + (seg === 'habit' ? '' : 'gray') + '" data-seg="habit">🌱 습관</button>' +
+        '<button class="grow small ' + (seg === 'proj' ? '' : 'gray') + '" data-seg="proj">🚩 프로젝트</button></div>';
+      var body;
+      if (seg === 'habit' || seg === 'proj') {
+        body = PR.app.views[seg].render().replace(/^<h2>[^<]*<\/h2>/, '');
+      } else if (seg === 'deadline') {
+        body = deadlineForm() + planList('deadline') + RULES;
+      } else {
+        body = routineForm() + planList('routine') + RULES;
+      }
       return '<h2>계획 관리</h2>' + segBtns + body;
     },
 
     bind: function (root) {
+      if (seg === 'habit' || seg === 'proj') {
+        var v = PR.app.views[seg];
+        if (v && v.bind) v.bind(root);
+        var sub = root.onclick;
+        root.onclick = function (e) {
+          var sb = e.target.closest('button');
+          if (sb && sb.dataset.seg) { switchSeg(sb.dataset.seg); return; }
+          if (sub) sub(e);
+        };
+        return;
+      }
       root.onclick = function (e) {
         var b = e.target.closest('button');
         if (!b) return;
-        if (b.dataset.seg) { seg = b.dataset.seg; editing = null; PR.app.render(); return; }
+        if (b.dataset.seg) { switchSeg(b.dataset.seg); return; }
         if (b.dataset.day !== undefined && b.dataset.day !== '') { b.classList.toggle('on'); return; }
         if (b.id === 'f-ftype-days' || b.id === 'f-ftype-weekly') {
           var weekly = b.id === 'f-ftype-weekly';
@@ -203,6 +231,7 @@
           PR.app.render();
         }
         if (b.dataset.del && confirm('삭제할까요? (기록은 유지됩니다)')) PR.actions.deletePlan(b.dataset.del);
+        if (b.dataset.undone && confirm('완료를 취소할까요? 받은 포인트가 회수됩니다.')) PR.actions.uncompletePlan(b.dataset.undone);
       };
 
       /* T/Q 둘 다 입력 시 모드 선택 표시 */
@@ -218,6 +247,12 @@
       }
     },
 
-    onNavAway: function () { editing = null; }
+    onNavAway: function () {
+      editing = null;
+      ['habit', 'proj'].forEach(function (n) {
+        var v = PR.app.views[n];
+        if (v && v.onNavAway) v.onNavAway();
+      });
+    }
   });
 })(window.PR = window.PR || {});

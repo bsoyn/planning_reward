@@ -17,6 +17,7 @@
     if (a.early > 0) parts.push('🚀 조기 +' + a.early + 'P');
     if (surprisePts) parts.push('🎉 서프라이즈 +' + surprisePts + 'P!');
     if (a.late) parts.push('⏳ 마감 지남 -50%');
+    if (a.retro) parts.push('🕓 ' + a.doneDate + ' 완료로 기록 · 보너스 제외');
     if (parts.length) msg += '<br><span style="opacity:.75">' + parts.join(' · ') + '</span>';
     if (extra) msg += extra;
     PR.toast(msg);
@@ -40,15 +41,18 @@
   A.completePlan = function (id, input) {
     var S = PR.store.state;
     var p = S.plans.find(function (x) { return x.id === id; });
-    if (!p || PR.sched.todayLog(id)) return;
+    if (!p) return;
+    var guardDate = (input && input.date) ? input.date : PR.todayStr();
+    if (S.logs.some(function (l) { return l.planId === id && l.date === guardDate; })) return; // 같은 날 중복 방지
+    if (p.kind === 'deadline' && p.done) return; // 소급 완료 등 중복 방지
     var a = PR.points.calcAward(p, input);
-    var sp = a.full ? PR.points.rollSurprise(p.basePts) : { hit: false, pts: 0 };
+    var sp = (a.full && !a.retro) ? PR.points.rollSurprise(p.basePts) : { hit: false, pts: 0 };
     var total = a.total + sp.pts;
-    S.logs.push({ id: PR.uid(), planId: id, date: PR.todayStr(), pts: total, r: a.r, full: a.full, duty: !!p.duty, onTime: a.onTime, surprise: sp.pts, ts: Date.now() });
+    S.logs.push({ id: PR.uid(), planId: id, date: a.doneDate, pts: total, r: a.r, full: a.full, duty: !!p.duty, onTime: a.onTime, surprise: sp.pts, retro: a.retro, ts: Date.now() });
     S.points += total;
     S.earned += total;
     var freezeMsg = '';
-    if (a.full && !p.duty) {
+    if (a.full && !p.duty && !a.retro) {
       S.bestStreak = Math.max(S.bestStreak, a.streak);
       freezeMsg = grantFreezes(a.streak);
     }
@@ -57,9 +61,18 @@
     awardToast(a, sp.pts, freezeMsg);
   };
 
-  A.uncompletePlan = function (id) {
+  A.uncompletePlan = function (id, date) {
     var S = PR.store.state;
-    var l = PR.sched.todayLog(id);
+    var l = date
+      ? S.logs.find(function (x) { return x.planId === id && x.date === date; })
+      : PR.sched.todayLog(id);
+    if (!l) { // 소급 기록된 마감형: 마지막 로그로 취소
+      var p0 = S.plans.find(function (x) { return x.id === id; });
+      if (p0 && p0.kind === 'deadline' && p0.done) {
+        var ls = S.logs.filter(function (x) { return x.planId === id; });
+        l = ls[ls.length - 1];
+      }
+    }
     if (!l) return;
     S.points -= l.pts;
     S.earned -= l.pts;

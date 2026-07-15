@@ -29,10 +29,16 @@ planning_reward.html    빌드 결과물 (폰에 넣어 쓰는 배포용 단일 
 ## 개발 흐름
 
 1. `src/` 안의 파일 수정
-2. `node build.js` 실행 → `planning_reward.html` 재생성
-3. 그 파일을 폰/PC에서 사용
+2. `node build.js` 실행 → `planning_reward.html`(로컬용) + `docs/`(배포용, PWA 포함) 재생성
+3. `git push` → GitHub Pages가 `docs/`를 자동 배포 → 폰에서 같은 주소로 접속
 
 개발 중에는 `src/index.html`을 브라우저로 열면 빌드 없이 바로 확인 가능.
+
+## 모바일 (PWA)
+
+- `docs/`에 manifest + service worker가 포함되어 GitHub Pages(Settings → Pages → main / docs)로 배포하면 Android Chrome에서 "홈 화면에 추가" 시 전체화면 앱으로 설치됨. 오프라인에서도 실행 가능.
+- 데이터는 폰 브라우저의 localStorage에 저장 — 주소가 같으므로 앱을 업데이트(push)해도 데이터는 그대로 유지됨.
+- service worker는 네트워크 우선이라 온라인이면 항상 최신 버전을 로드함. PWA 자산 수정은 `pwa/`에서.
 
 ## 아키텍처 규칙
 
@@ -77,6 +83,4 @@ v1 데이터는 로드 시 자동 마이그레이션 (기본P = 이전 포인트
 - **부분 달성 완화 + 착수 최저보상**: 지급 곡선을 `r²`에서 `r^1.5`로 완화하고, 조금이라도 하면 최소 10% 보장. "완벽 못 하면 시작도 안 함"을 줄임 (완전 달성은 그대로 100%). `points.js:calcAward`
 - **서프라이즈 보너스**: 완전 달성 시 13% 확률로 기본P의 20~50% 추가 지급 (변동비율 강화). 미리보기를 흔들지 않도록 계산에서 분리해 완료 액션에서만 굴림. `points.js:rollSurprise`
 - **스트릭 방어막(freeze)**: 7일 연속마다 자동 +1 (상한 3). 예정일을 놓치면 방어막이 자동 소모되어 스트릭을 지킴 → "한 번 깨지면 포기"(what-the-hell effect) 방지. 히어로에 🛡 표시. 스트릭은 스케줄 인식으로 바뀌어(예정 없는 휴식일은 스트릭을 끊지 않음) 방어막 규칙과 일관됨. `points.js:computeStreak`
-- **놓친 날 소액 페널티**: 방어막이 없을 때만, 놓친 예정일당 기본P의 20% 차감(1회 정산 상한 30P, 포인트는 0 미만으로 안 내려감). 의무·번외·주 n회형 제외, 방어막이 있으면 면제. 손실 회피 레버를 조작 없이 활용하되 과하지 않게. 설정에서 끌 수 있음(기본 켜짐). `reconcile.js`
-
-정산(`reconcile.run`)은 앱 로드 시 하루 1회, `lastReconcile` 다음날~어제 구간만 처리하며, v3→v4 마이그레이션 시 `lastReconcile`을 오늘로 두어 과거를 소급 차감하지 않음. 페널티는 `planId:'penalty'`, 서프라이즈는 완료 로그의 `surprise` 필드로 기록.
+- **놓친 날 소액 페널티**: �

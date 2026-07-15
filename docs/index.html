@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#5b5fc7">
 <title>갓생 포인트</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
 :root{
   --bg:#f4f4f8; --card:#ffffff; --ink:#26263a; --sub:#8a8aa0;
@@ -2191,6 +2193,11 @@ button.hcell.today.done{background:var(--green)}
   'use strict';
   PR.app.init();
 })(window.PR = window.PR || {});
+</script>
+<script>
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+}
 </script>
 </body>
 </html>
