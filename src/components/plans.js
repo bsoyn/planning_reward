@@ -13,8 +13,6 @@
     PR.app.render();
   }
 
-  var RUBRIC = '<div class="sub" style="margin-top:4px">💡 1P ≈ 100원. "남이 시키면 최소 얼마 받을까?" ÷ 100 — 의무(알바·출근·수업) 5~10P · 가볍고 재미있음 10~20P · 무난함 30~50P · 하기 싫고 머리 아픔 80~100P</div>';
-
   function targetFields(p) {
     return '<label>목표 (선택 · 비우면 O/X 체크)</label>' +
       '<div class="row">' +
@@ -33,13 +31,12 @@
   }
 
   function timeFields(p) {
-    return '<label>수행 시간대 (선택 · 이 시간 안에 완료하면 정시 보너스 +30%)</label>' +
+    return '<label>수행 시간대 (선택 · 정시 보너스 +30%)</label>' +
       '<div class="row">' +
         '<div class="grow"><input id="f-time" type="time" value="' + (p.time || '') + '"></div>' +
         '<div style="color:var(--sub)">~</div>' +
         '<div class="grow"><input id="f-timeto" type="time" value="' + (p.timeTo || '') + '"></div>' +
-      '</div>' +
-      '<div class="sub" style="margin-top:4px">끝 시각을 비우면 시작 시각 ±30분 내 완료 시 보너스</div>';
+      '</div>';
   }
 
   function commonHead(p, label, ph) {
@@ -48,10 +45,10 @@
         '<input id="f-title" placeholder="' + ph + '" value="' + PR.esc(p.title) + '"></div>' +
       '<div class="grow"><label>기본 포인트</label>' +
         '<input id="f-base" type="number" min="1" value="' + (p.basePts || '') + '" placeholder="30"></div>' +
-    '</div>' + RUBRIC +
+    '</div>' +
     '<label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:10px">' +
       '<input type="checkbox" id="f-duty" style="width:auto"' + (p.duty ? ' checked' : '') + '>' +
-      '당연히 해야 하는 의무 (알바·출근·수업 — 스트릭 카운트 제외, 낮은 P 권장)</label>';
+      '의무 (알바·출근·수업 — 스트릭 제외)</label>';
   }
 
   /* ---------------- 반복적인 일 폼 ---------------- */
@@ -96,7 +93,7 @@
       commonHead(p, '이름', '예: 보고서 제출, 과제') +
       targetFields(p) +
       timeFields(p) +
-      '<label>마감일 (일찍 끝낼수록 보너스 ↑, 지나면 지급 50%)</label>' +
+      '<label>마감일 (일찍 끝낼수록 보너스 ↑)</label>' +
       '<input id="f-deadline" type="date" value="' + (p.deadline || '') + '">' +
       '<div class="row" style="margin-top:12px">' +
         '<button id="f-save-deadline" class="grow">' + (editing ? '수정 저장' : '추가') + '</button>' +
@@ -107,7 +104,8 @@
 
   function planList(kind) {
     var S = PR.store.state;
-    var list = S.plans.filter(function (p) { return p.kind === kind; });
+    // 완료한 일은 계획탭에서 숨김 (달력탭에서 확인) — 미완료만 표시
+    var list = S.plans.filter(function (p) { return p.kind === kind && !p.done; });
     var items = list.length ? list.map(function (pl) {
       return '<div class="plan ' + (pl.done ? 'done' : '') + '">' +
         '<div class="grow">' +
@@ -121,12 +119,6 @@
     }).join('') : '<div class="empty">아직 없어요</div>';
     return '<div class="card">' + items + '</div>';
   }
-
-  var RULES = '<div class="card sub" style="line-height:1.7">💡 <b>지급 규칙</b><br>' +
-    '지급 = 기본P × 달성률² (부분 달성은 깎여서: 50% 달성 → 25%)<br>' +
-    '완전 달성 시: 스트릭 +2%/일(최대 +50%) · 시간대 내 완료 +30%<br>' +
-    '초과 달성: 초과분의 절반 요율, 최대 +50%<br>' +
-    '의무 항목은 스트릭 카운트에서 제외</div>';
 
   /* ---------------- 제출 ---------------- */
   function readTargets() {
@@ -190,9 +182,9 @@
       if (seg === 'habit' || seg === 'proj') {
         body = PR.app.views[seg].render().replace(/^<h2>[^<]*<\/h2>/, '');
       } else if (seg === 'deadline') {
-        body = deadlineForm() + planList('deadline') + RULES;
+        body = deadlineForm() + planList('deadline');
       } else {
-        body = routineForm() + planList('routine') + RULES;
+        body = routineForm() + planList('routine');
       }
       return '<h2>계획 관리</h2>' + segBtns + body;
     },

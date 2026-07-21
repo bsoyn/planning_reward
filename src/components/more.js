@@ -8,7 +8,8 @@
     render: function () {
       var segBtns = '<div class="row" style="margin-bottom:10px; margin-top:14px">' +
         '<button class="grow small ' + (seg === 'stats' ? '' : 'gray') + '" data-mseg="stats">📊 통계</button>' +
-        '<button class="grow small ' + (seg === 'setting' ? '' : 'gray') + '" data-mseg="setting">⚙️ 설정</button></div>';
+        '<button class="grow small ' + (seg === 'setting' ? '' : 'gray') + '" data-mseg="setting">⚙️ 설정</button>' +
+        '<button class="grow small ' + (seg === 'help' ? '' : 'gray') + '" data-mseg="help">❓ 도움말</button></div>';
       return segBtns + PR.app.views[seg].render();
     },
 
