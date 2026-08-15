@@ -188,13 +188,17 @@ button.hcell.today.done{background:var(--accent)}
 /* ===== core/store.js ===== */
 /* 상태 저장소: localStorage 영속화. 모든 상태 변경은 actions를 통해서만.
 
-   데이터 모델 v4
+   데이터 모델 v5
    plan = { id, title, kind:'habit'|'routine'|'deadline', basePts, duty,
             targetT(분|null), targetQ(수|null), unitQ, mode:'or'|'and',   // routine/deadline
             time:'HH:MM'|'',                                             // routine
             freq:{type:'days',days:[]}|{type:'weekly',n},                // habit/routine
+            startDate:'YYYY-MM-DD'|'', endDate:'YYYY-MM-DD'|'',          // habit/routine 반복 기간
             deadline:'YYYY-MM-DD', createdAt,                            // deadline
             done, active }
+   - startDate/endDate(반복 기간): 범위 밖 날짜에는 아예 예정되지 않음 (생성 전 과거일에
+     계획이 소급 표시되어 스트릭·달성률이 왜곡되던 문제 방지).
+     비우면 무제한 — startDate '' = 언제부터든, endDate '' = 종료 없음.
    - habit(습관): 정해진 시각 없이 주기적으로 하면 좋은 것. 단순 O/X.
    - routine(반복적인 일): 목표(T/Q)·정시가 있는 반복 작업. 알바/출근 등 의무 포함.
    - duty(의무): 낮은 P 권장, 전체 스트릭 카운트에서 제외.
@@ -207,7 +211,7 @@ button.hcell.today.done{background:var(--accent)}
   'use strict';
 
   var LS_KEY = 'planning_reward_v1'; // 키는 유지 (내용의 v 필드로 버전 관리)
-  var VER = 4;
+  var VER = 5;
 
   function blank() {
     return { v: VER, points: 0, earned: 0, plans: [], logs: [], projects: [], rewards: [], purchases: [], bestStreak: 0, lastMod: 0,
@@ -261,11 +265,34 @@ button.hcell.today.done{background:var(--accent)}
     return d;
   }
 
+  /* v4 → v5: 반복 계획에 반복 기간(startDate/endDate) 추가.
+     기존 계획의 시작일은 "생성일과 최초 기록일 중 이른 쪽" — 생성일만 쓰면
+     그보다 앞선 과거 기록이 달력에서 사라지므로 둘을 함께 본다. 둘 다 없으면
+     무제한('')으로 두어 기존 동작을 그대로 유지. */
+  function migrateV4(d) {
+    var firstLog = {};
+    (d.logs || []).forEach(function (l) {
+      if (!l.planId || !l.date) return;
+      if (!firstLog[l.planId] || l.date < firstLog[l.planId]) firstLog[l.planId] = l.date;
+    });
+    d.plans = (d.plans || []).map(function (p) {
+      if (p.kind !== 'habit' && p.kind !== 'routine') {
+        return Object.assign({ startDate: '', endDate: '' }, p);
+      }
+      var cands = [p.createdAt, firstLog[p.id]].filter(Boolean);
+      var start = cands.length ? cands.sort()[0] : '';
+      return Object.assign({}, p, { startDate: p.startDate || start, endDate: p.endDate || '' });
+    });
+    d.v = 5;
+    return d;
+  }
+
   function normalize(d) {
     if (!d || !d.v) return blank();
     if (d.v === 1) d = migrateV1(d);
     if (d.v === 2) d = migrateV2(d);
     if (d.v === 3) d = migrateV3(d);
+    if (d.v === 4) d = migrateV4(d);
     if (d.v !== VER) return blank();
     return Object.assign(blank(), d);
   }
@@ -355,10 +382,25 @@ button.hcell.today.done{background:var(--accent)}
      - 아무것도 안 했지만 예정도 없던 날(휴식일) → 중립(스트릭 유지, 카운트 안 함)
      - 예정이 있었는데 놓친 날 → 스트릭 끊김
      extraToday=true면 오늘은 완전 달성으로 간주 */
+  /* 거슬러 올라갈 하한 — 반복 계획 시작일·기록·방어막 보호일 중 가장 이른 날.
+     그보다 이전은 인정될 수도, 끊길 수도 없으므로 결과를 바꾸지 않고 순회만 아낀다. */
+  function streakFloor() {
+    var S = PR.store.state;
+    var floor = null;
+    function lo(ds) { if (ds && (!floor || ds < floor)) floor = ds; }
+    S.plans.forEach(function (p) {
+      if (p.kind === 'habit' || p.kind === 'routine') lo(p.startDate);
+    });
+    S.logs.forEach(function (l) { lo(l.date); });
+    (S.frozenDates || []).forEach(lo);
+    return floor;
+  }
+
   function computeStreak(extraToday) {
     var frozen = {};
     (PR.store.state.frozenDates || []).forEach(function (d) { frozen[d] = 1; });
     var todayS = PR.todayStr();
+    var floor = streakFloor();
     function met(ds) { return frozen[ds] || metOn(ds) || (extraToday && ds === todayS); }
 
     var cur = 0;
@@ -366,6 +408,7 @@ button.hcell.today.done{background:var(--accent)}
     if (!met(todayS)) d.setDate(d.getDate() - 1); // 오늘 미완료 = 아직 안 끊김
     for (var i = 0; i < 3650; i++) {
       var ds = PR.todayStr(d);
+      if (floor && ds < floor) break;
       if (met(ds)) { cur++; }
       else if (obligationOn(ds)) { break; } // 예정 있었는데 놓침 → 종료
       // else 휴식일: 중립, 계속 거슬러 올라감
@@ -486,9 +529,23 @@ button.hcell.today.done{background:var(--accent)}
 (function (PR) {
   'use strict';
 
-  /* 반복 계획(습관/반복적인 일)이 해당 날짜에 예정인지 (요일 고정: 매칭 / 주 n회: 매일 노출) */
+  /* 반복 기간(startDate~endDate) 안의 날짜인지. 비어 있으면 그쪽은 무제한 */
+  function inRange(p, dateStr) {
+    if (p.startDate && dateStr < p.startDate) return false;
+    if (p.endDate && dateStr > p.endDate) return false;
+    return true;
+  }
+
+  /* 반복 기간이 이미 끝난 계획인지 */
+  function isExpired(p, dateStr) {
+    return !!(p.endDate && (dateStr || PR.todayStr()) > p.endDate);
+  }
+
+  /* 반복 계획(습관/반복적인 일)이 해당 날짜에 예정인지 (요일 고정: 매칭 / 주 n회: 매일 노출).
+     반복 기간 밖(추가하기 전 과거, 종료 후)은 예정 아님 — 스트릭·달성률·달력 모두 이 판정을 따른다. */
   function isScheduledOn(p, dateStr) {
     if (!p.active || (p.kind !== 'habit' && p.kind !== 'routine')) return false;
+    if (!inRange(p, dateStr)) return false;
     var f = p.freq || { type: 'days', days: [] };
     if (f.type === 'weekly') return true;
     if (f.days && f.days.length) {
@@ -527,8 +584,10 @@ button.hcell.today.done{background:var(--accent)}
       var wk = PR.weekKey(PR.todayStr());
       if (weekFullCount(p.id, wk) >= f.n) n++;
       var d = new Date(wk + 'T12:00:00');
+      var minWk = p.startDate ? PR.weekKey(p.startDate) : '';
       for (var i = 0; i < 520; i++) {
         d.setDate(d.getDate() - 7);
+        if (minWk && PR.todayStr(d) < minWk) break; // 반복 기간 이전 = 더 볼 것 없음
         if (weekFullCount(p.id, PR.todayStr(d)) >= f.n) n++;
         else break;
       }
@@ -542,6 +601,7 @@ button.hcell.today.done{background:var(--accent)}
     if (isScheduledOn(p, ds) && !dates[ds]) day.setDate(day.getDate() - 1); // 오늘 미완료 = 아직 안 끊김
     for (var j = 0; j < 3650; j++) {
       ds = PR.todayStr(day);
+      if (p.startDate && ds < p.startDate) break; // 반복 기간 이전 = 더 볼 것 없음
       if (isScheduledOn(p, ds)) {
         if (dates[ds]) cur++;
         else break;
@@ -552,6 +612,8 @@ button.hcell.today.done{background:var(--accent)}
   }
 
   PR.sched = {
+    inRange: inRange,
+    isExpired: isExpired,
     isScheduledOn: isScheduledOn,
     todayLog: todayLog,
     weekFullCount: weekFullCount,
@@ -1050,6 +1112,16 @@ button.hcell.today.done{background:var(--accent)}
       var dd = f.type === 'weekly' ? '주 ' + f.n + '회'
         : (f.days && f.days.length) ? f.days.map(function (d) { return PR.DAYS[d]; }).join('') : '매일';
       c += '<span class="chip" style="background:#f0f0f5;color:#999">' + dd + '</span>';
+      /* 반복 기간: 아직 시작 전이거나 종료일이 있을 때만 표시 (평소엔 칩을 늘리지 않음) */
+      var today = PR.todayStr();
+      if (p.startDate && p.startDate > today) {
+        c += '<span class="chip time">🗓 ' + p.startDate.slice(5).replace('-', '/') + ' 시작</span>';
+      }
+      if (p.endDate) {
+        c += p.endDate < today
+          ? '<span class="chip" style="background:#f0f0f5;color:#999">기간 종료</span>'
+          : '<span class="chip time">~' + p.endDate.slice(5).replace('-', '/') + '</span>';
+      }
     }
     if (p.kind === 'deadline' && p.deadline) {
       var left = PR.daysBetween(PR.todayStr(), p.deadline);
@@ -1057,6 +1129,30 @@ button.hcell.today.done{background:var(--accent)}
       c += '<span class="chip ' + (left <= 3 ? 'd3' : 'time') + '">📅 ' + lbl + '</span>';
     }
     return c;
+  }
+
+  /* 반복 기간 입력 (습관/반복적인 일). idPrefix: 'f'(계획) | 'h'(습관) */
+  function rangeFields(p, idPrefix) {
+    return '<label>반복 기간 (종료일은 비워도 됨)</label>' +
+      '<div class="row">' +
+        '<div class="grow"><input id="' + idPrefix + '-start" type="date" value="' + (p.startDate || '') + '"></div>' +
+        '<div style="color:var(--sub)">~</div>' +
+        '<div class="grow"><input id="' + idPrefix + '-end" type="date" value="' + (p.endDate || '') + '"></div>' +
+      '</div>' +
+      '<div class="sub" style="margin-top:2px">시작일 이전 날짜에는 이 계획이 아예 안 나타나요 — 달력·달성률·연속 일수 모두 제외</div>';
+  }
+
+  /* 반복 기간 읽기. 범위가 잘못되면 토스트 후 null */
+  function readRange(idPrefix) {
+    var s = document.getElementById(idPrefix + '-start');
+    var e = document.getElementById(idPrefix + '-end');
+    var startDate = s ? (s.value || '') : '';
+    var endDate = e ? (e.value || '') : '';
+    if (startDate && endDate && endDate < startDate) {
+      PR.toast('종료일이 시작일보다 빨라요');
+      return null;
+    }
+    return { startDate: startDate, endDate: endDate };
   }
 
   /* 진행률 바 (프로젝트) */
@@ -1092,7 +1188,8 @@ button.hcell.today.done{background:var(--accent)}
     return h;
   }
 
-  PR.vh = { planChips: planChips, progressBar: progressBar, completeForm: completeForm };
+  PR.vh = { planChips: planChips, rangeFields: rangeFields, readRange: readRange,
+            progressBar: progressBar, completeForm: completeForm };
 })(window.PR = window.PR || {});
 
 /* ===== components/hero.js ===== */
@@ -1145,7 +1242,8 @@ button.hcell.today.done{background:var(--accent)}
   }
 
   function gridHtml() {
-    var hs = habits();
+    /* 반복 기간이 끝난 습관은 그리드에서 제외 (아래 '습관 관리'에는 그대로 보임) */
+    var hs = habits().filter(function (p) { return !PR.sched.isExpired(p); });
     if (!hs.length) return '<div class="card"><div class="empty">습관을 추가해 보세요!<br>물 마시기, 스트레칭, 일기 쓰기 같은 것들 🌱</div></div>';
     var days = last7();
     var today = PR.todayStr();
@@ -1186,7 +1284,7 @@ button.hcell.today.done{background:var(--accent)}
   }
 
   function formHtml() {
-    var p = editing || { title: '', basePts: 10, freq: { type: 'days', days: [] } };
+    var p = editing || { title: '', basePts: 10, freq: { type: 'days', days: [] }, startDate: PR.todayStr(), endDate: '' };
     var f = p.freq || { type: 'days', days: [] };
     var dayBtns = PR.DAYS.map(function (d, i) {
       return '<button type="button" class="' + ((f.days || []).indexOf(i) !== -1 ? 'on' : '') + '" data-day="' + i + '">' + d + '</button>';
@@ -1213,6 +1311,7 @@ button.hcell.today.done{background:var(--accent)}
         '<label>주당 횟수</label>' +
         '<input id="h-wn" type="number" min="1" max="7" value="' + (f.n || 3) + '">' +
       '</div>' +
+      PR.vh.rangeFields(p, 'h') +
       '<div class="row" style="margin-top:12px">' +
         '<button id="h-save" class="grow">' + (editing ? '수정 저장' : '습관 추가') + '</button>' +
         (editing ? '<button id="h-cancel" class="gray">취소</button>' : '') +
@@ -1228,8 +1327,10 @@ button.hcell.today.done{background:var(--accent)}
         var f = p.freq || { type: 'days', days: [] };
         var dd = f.type === 'weekly' ? '주 ' + f.n + '회'
           : (f.days && f.days.length) ? f.days.map(function (d) { return PR.DAYS[d]; }).join('') : '매일';
+        var period = PR.sched.isExpired(p) ? ' · <span style="color:var(--sub)">기간 종료(' + p.endDate + ')</span>'
+          : (p.endDate ? ' · ~' + p.endDate : '');
         return '<div class="plan"><div class="grow"><div class="t">' + PR.esc(p.title) + '</div>' +
-          '<div class="sub">' + dd + ' · +' + p.basePts + 'P</div></div>' +
+          '<div class="sub">' + dd + ' · +' + p.basePts + 'P' + period + '</div></div>' +
           '<button class="ghost small" data-hedit="' + p.id + '">수정</button>' +
           '<button class="danger small" data-hdel="' + p.id + '">삭제</button></div>';
       }).join('') + '</details></div>';
@@ -1240,6 +1341,8 @@ button.hcell.today.done{background:var(--accent)}
     var base = Number(document.getElementById('h-base').value);
     if (!title) { PR.toast('습관 이름을 입력해 주세요'); return; }
     if (!base || base < 1) { PR.toast('포인트를 입력해 주세요'); return; }
+    var range = PR.vh.readRange('h');
+    if (!range) return;
     var weekly = !document.getElementById('h-weekly-wrap').classList.contains('hidden');
     var p = {
       id: editing ? editing.id : PR.uid(),
@@ -1248,6 +1351,7 @@ button.hcell.today.done{background:var(--accent)}
       freq: weekly
         ? { type: 'weekly', n: Math.min(7, Math.max(1, Number(document.getElementById('h-wn').value) || 3)) }
         : { type: 'days', days: Array.prototype.map.call(document.querySelectorAll('#h-days button.on'), function (b) { return Number(b.dataset.day); }) },
+      startDate: range.startDate, endDate: range.endDate,
       deadline: '', createdAt: editing ? editing.createdAt : PR.todayStr(),
       done: false, active: true
     };
@@ -1517,7 +1621,8 @@ button.hcell.today.done{background:var(--accent)}
   /* ---------------- 반복적인 일 폼 ---------------- */
   function routineForm() {
     var p = (editing && editing.kind === 'routine') ? editing
-      : { title: '', basePts: 30, duty: false, targetT: '', targetQ: '', unitQ: '', mode: 'or', time: '', timeTo: '', freq: { type: 'days', days: [] } };
+      : { title: '', basePts: 30, duty: false, targetT: '', targetQ: '', unitQ: '', mode: 'or', time: '', timeTo: '',
+          freq: { type: 'days', days: [] }, startDate: PR.todayStr(), endDate: '' };
     var f = p.freq || { type: 'days', days: [] };
     var dayBtns = PR.DAYS.map(function (d, i) {
       return '<button type="button" class="' + ((f.days || []).indexOf(i) !== -1 ? 'on' : '') + '" data-day="' + i + '">' + d + '</button>';
@@ -1540,6 +1645,7 @@ button.hcell.today.done{background:var(--accent)}
         '<label>주당 횟수</label>' +
         '<input id="f-wn" type="number" min="1" max="7" value="' + (f.n || 3) + '">' +
       '</div>' +
+      PR.vh.rangeFields(p, 'f') +
       '<div class="row" style="margin-top:12px">' +
         '<button id="f-save-routine" class="grow">' + (editing ? '수정 저장' : '추가') + '</button>' +
         (editing ? '<button id="f-cancel" class="gray">취소</button>' : '') +
@@ -1569,6 +1675,10 @@ button.hcell.today.done{background:var(--accent)}
     var S = PR.store.state;
     // 완료한 일은 계획탭에서 숨김 (달력탭에서 확인) — 미완료만 표시
     var list = S.plans.filter(function (p) { return p.kind === kind && !p.done; });
+    /* 반복 기간이 끝난 계획은 목록 아래로 (칩으로 '기간 종료' 표시됨) */
+    list = list.slice().sort(function (a, b) {
+      return (PR.sched.isExpired(a) ? 1 : 0) - (PR.sched.isExpired(b) ? 1 : 0);
+    });
     var items = list.length ? list.map(function (pl) {
       return '<div class="plan ' + (pl.done ? 'done' : '') + '">' +
         '<div class="grow">' +
@@ -1604,7 +1714,7 @@ button.hcell.today.done{background:var(--accent)}
       duty: document.getElementById('f-duty').checked,
       time: document.getElementById('f-time').value || '',
       timeTo: document.getElementById('f-timeto').value || '',
-      freq: { type: 'days', days: [] }, deadline: '',
+      freq: { type: 'days', days: [] }, deadline: '', startDate: '', endDate: '',
       createdAt: editing ? (editing.createdAt || PR.todayStr()) : PR.todayStr(),
       done: editing ? !!editing.done : false,
       active: true
@@ -1612,8 +1722,12 @@ button.hcell.today.done{background:var(--accent)}
   }
 
   function submitRoutine() {
+    var range = PR.vh.readRange('f');
+    if (!range) return;
     var p = submitCommon('routine');
     if (!p) return;
+    p.startDate = range.startDate;
+    p.endDate = range.endDate;
     var weekly = !document.getElementById('f-weekly-wrap').classList.contains('hidden');
     p.freq = weekly
       ? { type: 'weekly', n: Math.min(7, Math.max(1, Number(document.getElementById('f-wn').value) || 3)) }

@@ -1,12 +1,16 @@
 /* 상태 저장소: localStorage 영속화. 모든 상태 변경은 actions를 통해서만.
 
-   데이터 모델 v4
+   데이터 모델 v5
    plan = { id, title, kind:'habit'|'routine'|'deadline', basePts, duty,
             targetT(분|null), targetQ(수|null), unitQ, mode:'or'|'and',   // routine/deadline
             time:'HH:MM'|'',                                             // routine
             freq:{type:'days',days:[]}|{type:'weekly',n},                // habit/routine
+            startDate:'YYYY-MM-DD'|'', endDate:'YYYY-MM-DD'|'',          // habit/routine 반복 기간
             deadline:'YYYY-MM-DD', createdAt,                            // deadline
             done, active }
+   - startDate/endDate(반복 기간): 범위 밖 날짜에는 아예 예정되지 않음 (생성 전 과거일에
+     계획이 소급 표시되어 스트릭·달성률이 왜곡되던 문제 방지).
+     비우면 무제한 — startDate '' = 언제부터든, endDate '' = 종료 없음.
    - habit(습관): 정해진 시각 없이 주기적으로 하면 좋은 것. 단순 O/X.
    - routine(반복적인 일): 목표(T/Q)·정시가 있는 반복 작업. 알바/출근 등 의무 포함.
    - duty(의무): 낮은 P 권장, 전체 스트릭 카운트에서 제외.
@@ -19,7 +23,7 @@
   'use strict';
 
   var LS_KEY = 'planning_reward_v1'; // 키는 유지 (내용의 v 필드로 버전 관리)
-  var VER = 4;
+  var VER = 5;
 
   function blank() {
     return { v: VER, points: 0, earned: 0, plans: [], logs: [], projects: [], rewards: [], purchases: [], bestStreak: 0, lastMod: 0,
@@ -73,11 +77,34 @@
     return d;
   }
 
+  /* v4 → v5: 반복 계획에 반복 기간(startDate/endDate) 추가.
+     기존 계획의 시작일은 "생성일과 최초 기록일 중 이른 쪽" — 생성일만 쓰면
+     그보다 앞선 과거 기록이 달력에서 사라지므로 둘을 함께 본다. 둘 다 없으면
+     무제한('')으로 두어 기존 동작을 그대로 유지. */
+  function migrateV4(d) {
+    var firstLog = {};
+    (d.logs || []).forEach(function (l) {
+      if (!l.planId || !l.date) return;
+      if (!firstLog[l.planId] || l.date < firstLog[l.planId]) firstLog[l.planId] = l.date;
+    });
+    d.plans = (d.plans || []).map(function (p) {
+      if (p.kind !== 'habit' && p.kind !== 'routine') {
+        return Object.assign({ startDate: '', endDate: '' }, p);
+      }
+      var cands = [p.createdAt, firstLog[p.id]].filter(Boolean);
+      var start = cands.length ? cands.sort()[0] : '';
+      return Object.assign({}, p, { startDate: p.startDate || start, endDate: p.endDate || '' });
+    });
+    d.v = 5;
+    return d;
+  }
+
   function normalize(d) {
     if (!d || !d.v) return blank();
     if (d.v === 1) d = migrateV1(d);
     if (d.v === 2) d = migrateV2(d);
     if (d.v === 3) d = migrateV3(d);
+    if (d.v === 4) d = migrateV4(d);
     if (d.v !== VER) return blank();
     return Object.assign(blank(), d);
   }

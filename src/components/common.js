@@ -15,6 +15,16 @@
       var dd = f.type === 'weekly' ? '주 ' + f.n + '회'
         : (f.days && f.days.length) ? f.days.map(function (d) { return PR.DAYS[d]; }).join('') : '매일';
       c += '<span class="chip" style="background:#f0f0f5;color:#999">' + dd + '</span>';
+      /* 반복 기간: 아직 시작 전이거나 종료일이 있을 때만 표시 (평소엔 칩을 늘리지 않음) */
+      var today = PR.todayStr();
+      if (p.startDate && p.startDate > today) {
+        c += '<span class="chip time">🗓 ' + p.startDate.slice(5).replace('-', '/') + ' 시작</span>';
+      }
+      if (p.endDate) {
+        c += p.endDate < today
+          ? '<span class="chip" style="background:#f0f0f5;color:#999">기간 종료</span>'
+          : '<span class="chip time">~' + p.endDate.slice(5).replace('-', '/') + '</span>';
+      }
     }
     if (p.kind === 'deadline' && p.deadline) {
       var left = PR.daysBetween(PR.todayStr(), p.deadline);
@@ -22,6 +32,30 @@
       c += '<span class="chip ' + (left <= 3 ? 'd3' : 'time') + '">📅 ' + lbl + '</span>';
     }
     return c;
+  }
+
+  /* 반복 기간 입력 (습관/반복적인 일). idPrefix: 'f'(계획) | 'h'(습관) */
+  function rangeFields(p, idPrefix) {
+    return '<label>반복 기간 (종료일은 비워도 됨)</label>' +
+      '<div class="row">' +
+        '<div class="grow"><input id="' + idPrefix + '-start" type="date" value="' + (p.startDate || '') + '"></div>' +
+        '<div style="color:var(--sub)">~</div>' +
+        '<div class="grow"><input id="' + idPrefix + '-end" type="date" value="' + (p.endDate || '') + '"></div>' +
+      '</div>' +
+      '<div class="sub" style="margin-top:2px">시작일 이전 날짜에는 이 계획이 아예 안 나타나요 — 달력·달성률·연속 일수 모두 제외</div>';
+  }
+
+  /* 반복 기간 읽기. 범위가 잘못되면 토스트 후 null */
+  function readRange(idPrefix) {
+    var s = document.getElementById(idPrefix + '-start');
+    var e = document.getElementById(idPrefix + '-end');
+    var startDate = s ? (s.value || '') : '';
+    var endDate = e ? (e.value || '') : '';
+    if (startDate && endDate && endDate < startDate) {
+      PR.toast('종료일이 시작일보다 빨라요');
+      return null;
+    }
+    return { startDate: startDate, endDate: endDate };
   }
 
   /* 진행률 바 (프로젝트) */
@@ -57,5 +91,6 @@
     return h;
   }
 
-  PR.vh = { planChips: planChips, progressBar: progressBar, completeForm: completeForm };
+  PR.vh = { planChips: planChips, rangeFields: rangeFields, readRange: readRange,
+            progressBar: progressBar, completeForm: completeForm };
 })(window.PR = window.PR || {});

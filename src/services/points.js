@@ -50,10 +50,25 @@
      - 아무것도 안 했지만 예정도 없던 날(휴식일) → 중립(스트릭 유지, 카운트 안 함)
      - 예정이 있었는데 놓친 날 → 스트릭 끊김
      extraToday=true면 오늘은 완전 달성으로 간주 */
+  /* 거슬러 올라갈 하한 — 반복 계획 시작일·기록·방어막 보호일 중 가장 이른 날.
+     그보다 이전은 인정될 수도, 끊길 수도 없으므로 결과를 바꾸지 않고 순회만 아낀다. */
+  function streakFloor() {
+    var S = PR.store.state;
+    var floor = null;
+    function lo(ds) { if (ds && (!floor || ds < floor)) floor = ds; }
+    S.plans.forEach(function (p) {
+      if (p.kind === 'habit' || p.kind === 'routine') lo(p.startDate);
+    });
+    S.logs.forEach(function (l) { lo(l.date); });
+    (S.frozenDates || []).forEach(lo);
+    return floor;
+  }
+
   function computeStreak(extraToday) {
     var frozen = {};
     (PR.store.state.frozenDates || []).forEach(function (d) { frozen[d] = 1; });
     var todayS = PR.todayStr();
+    var floor = streakFloor();
     function met(ds) { return frozen[ds] || metOn(ds) || (extraToday && ds === todayS); }
 
     var cur = 0;
@@ -61,6 +76,7 @@
     if (!met(todayS)) d.setDate(d.getDate() - 1); // 오늘 미완료 = 아직 안 끊김
     for (var i = 0; i < 3650; i++) {
       var ds = PR.todayStr(d);
+      if (floor && ds < floor) break;
       if (met(ds)) { cur++; }
       else if (obligationOn(ds)) { break; } // 예정 있었는데 놓침 → 종료
       // else 휴식일: 중립, 계속 거슬러 올라감

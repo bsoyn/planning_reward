@@ -54,7 +54,8 @@
   /* ---------------- 반복적인 일 폼 ---------------- */
   function routineForm() {
     var p = (editing && editing.kind === 'routine') ? editing
-      : { title: '', basePts: 30, duty: false, targetT: '', targetQ: '', unitQ: '', mode: 'or', time: '', timeTo: '', freq: { type: 'days', days: [] } };
+      : { title: '', basePts: 30, duty: false, targetT: '', targetQ: '', unitQ: '', mode: 'or', time: '', timeTo: '',
+          freq: { type: 'days', days: [] }, startDate: PR.todayStr(), endDate: '' };
     var f = p.freq || { type: 'days', days: [] };
     var dayBtns = PR.DAYS.map(function (d, i) {
       return '<button type="button" class="' + ((f.days || []).indexOf(i) !== -1 ? 'on' : '') + '" data-day="' + i + '">' + d + '</button>';
@@ -77,6 +78,7 @@
         '<label>주당 횟수</label>' +
         '<input id="f-wn" type="number" min="1" max="7" value="' + (f.n || 3) + '">' +
       '</div>' +
+      PR.vh.rangeFields(p, 'f') +
       '<div class="row" style="margin-top:12px">' +
         '<button id="f-save-routine" class="grow">' + (editing ? '수정 저장' : '추가') + '</button>' +
         (editing ? '<button id="f-cancel" class="gray">취소</button>' : '') +
@@ -106,6 +108,10 @@
     var S = PR.store.state;
     // 완료한 일은 계획탭에서 숨김 (달력탭에서 확인) — 미완료만 표시
     var list = S.plans.filter(function (p) { return p.kind === kind && !p.done; });
+    /* 반복 기간이 끝난 계획은 목록 아래로 (칩으로 '기간 종료' 표시됨) */
+    list = list.slice().sort(function (a, b) {
+      return (PR.sched.isExpired(a) ? 1 : 0) - (PR.sched.isExpired(b) ? 1 : 0);
+    });
     var items = list.length ? list.map(function (pl) {
       return '<div class="plan ' + (pl.done ? 'done' : '') + '">' +
         '<div class="grow">' +
@@ -141,7 +147,7 @@
       duty: document.getElementById('f-duty').checked,
       time: document.getElementById('f-time').value || '',
       timeTo: document.getElementById('f-timeto').value || '',
-      freq: { type: 'days', days: [] }, deadline: '',
+      freq: { type: 'days', days: [] }, deadline: '', startDate: '', endDate: '',
       createdAt: editing ? (editing.createdAt || PR.todayStr()) : PR.todayStr(),
       done: editing ? !!editing.done : false,
       active: true
@@ -149,8 +155,12 @@
   }
 
   function submitRoutine() {
+    var range = PR.vh.readRange('f');
+    if (!range) return;
     var p = submitCommon('routine');
     if (!p) return;
+    p.startDate = range.startDate;
+    p.endDate = range.endDate;
     var weekly = !document.getElementById('f-weekly-wrap').classList.contains('hidden');
     p.freq = weekly
       ? { type: 'weekly', n: Math.min(7, Math.max(1, Number(document.getElementById('f-wn').value) || 3)) }

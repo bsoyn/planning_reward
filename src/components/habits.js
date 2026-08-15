@@ -19,7 +19,8 @@
   }
 
   function gridHtml() {
-    var hs = habits();
+    /* 반복 기간이 끝난 습관은 그리드에서 제외 (아래 '습관 관리'에는 그대로 보임) */
+    var hs = habits().filter(function (p) { return !PR.sched.isExpired(p); });
     if (!hs.length) return '<div class="card"><div class="empty">습관을 추가해 보세요!<br>물 마시기, 스트레칭, 일기 쓰기 같은 것들 🌱</div></div>';
     var days = last7();
     var today = PR.todayStr();
@@ -60,7 +61,7 @@
   }
 
   function formHtml() {
-    var p = editing || { title: '', basePts: 10, freq: { type: 'days', days: [] } };
+    var p = editing || { title: '', basePts: 10, freq: { type: 'days', days: [] }, startDate: PR.todayStr(), endDate: '' };
     var f = p.freq || { type: 'days', days: [] };
     var dayBtns = PR.DAYS.map(function (d, i) {
       return '<button type="button" class="' + ((f.days || []).indexOf(i) !== -1 ? 'on' : '') + '" data-day="' + i + '">' + d + '</button>';
@@ -87,6 +88,7 @@
         '<label>주당 횟수</label>' +
         '<input id="h-wn" type="number" min="1" max="7" value="' + (f.n || 3) + '">' +
       '</div>' +
+      PR.vh.rangeFields(p, 'h') +
       '<div class="row" style="margin-top:12px">' +
         '<button id="h-save" class="grow">' + (editing ? '수정 저장' : '습관 추가') + '</button>' +
         (editing ? '<button id="h-cancel" class="gray">취소</button>' : '') +
@@ -102,8 +104,10 @@
         var f = p.freq || { type: 'days', days: [] };
         var dd = f.type === 'weekly' ? '주 ' + f.n + '회'
           : (f.days && f.days.length) ? f.days.map(function (d) { return PR.DAYS[d]; }).join('') : '매일';
+        var period = PR.sched.isExpired(p) ? ' · <span style="color:var(--sub)">기간 종료(' + p.endDate + ')</span>'
+          : (p.endDate ? ' · ~' + p.endDate : '');
         return '<div class="plan"><div class="grow"><div class="t">' + PR.esc(p.title) + '</div>' +
-          '<div class="sub">' + dd + ' · +' + p.basePts + 'P</div></div>' +
+          '<div class="sub">' + dd + ' · +' + p.basePts + 'P' + period + '</div></div>' +
           '<button class="ghost small" data-hedit="' + p.id + '">수정</button>' +
           '<button class="danger small" data-hdel="' + p.id + '">삭제</button></div>';
       }).join('') + '</details></div>';
@@ -114,6 +118,8 @@
     var base = Number(document.getElementById('h-base').value);
     if (!title) { PR.toast('습관 이름을 입력해 주세요'); return; }
     if (!base || base < 1) { PR.toast('포인트를 입력해 주세요'); return; }
+    var range = PR.vh.readRange('h');
+    if (!range) return;
     var weekly = !document.getElementById('h-weekly-wrap').classList.contains('hidden');
     var p = {
       id: editing ? editing.id : PR.uid(),
@@ -122,6 +128,7 @@
       freq: weekly
         ? { type: 'weekly', n: Math.min(7, Math.max(1, Number(document.getElementById('h-wn').value) || 3)) }
         : { type: 'days', days: Array.prototype.map.call(document.querySelectorAll('#h-days button.on'), function (b) { return Number(b.dataset.day); }) },
+      startDate: range.startDate, endDate: range.endDate,
       deadline: '', createdAt: editing ? editing.createdAt : PR.todayStr(),
       done: false, active: true
     };
