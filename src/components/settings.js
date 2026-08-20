@@ -24,6 +24,17 @@
           '<input type="file" id="s-file" accept=".json" class="hidden">' +
         '</div>' +
         '<div class="card">' +
+          '<div style="font-weight:700; margin-bottom:8px">🌙 하루 시작 시각</div>' +
+          '<div class="sub" style="line-height:1.6; margin-bottom:8px">이 시각 전까지는 아직 <b>어제</b>로 기록돼요.<br>' +
+            '<span style="opacity:.7">자정 넘겨 끝냈다고 보너스를 놓치는 일이 없어요</span></div>' +
+          '<div class="row" style="flex-wrap:wrap">' +
+            [0, 2, 3, 4, 5, 6].map(function (h) {
+              return '<button class="grow small ' + (S.dayStart === h ? '' : 'gray') + '" data-ds="' + h + '">' +
+                (h === 0 ? '자정' : '새벽 ' + h + '시') + '</button>';
+            }).join('') +
+          '</div>' +
+        '</div>' +
+        '<div class="card">' +
           '<div style="font-weight:700; margin-bottom:8px">🎯 보상 규칙</div>' +
           '<div class="row" style="align-items:center; justify-content:space-between">' +
             '<div class="sub" style="line-height:1.6; flex:1">예정된 계획을 놓친 날 소액 차감<br>' +
@@ -45,6 +56,7 @@
       root.onclick = function (e) {
         var b = e.target.closest('button');
         if (!b) return;
+        if (b.dataset.ds !== undefined) { PR.actions.setDayStart(b.dataset.ds); return; }
         if (b.id === 's-penalty') PR.actions.setPenalty(!PR.store.state.penaltyOn);
         if (b.id === 's-export') PR.sync.exportData();
         if (b.id === 's-import') document.getElementById('s-file').click();

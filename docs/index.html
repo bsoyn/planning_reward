@@ -143,9 +143,36 @@ button.hcell.today.done{background:var(--accent)}
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   };
 
-  PR.todayStr = function (d) {
-    d = d || new Date();
+  /* 하루 시작 시각 (기본 새벽 4시). 자정을 넘겨 끝낸 일이 "어제 것"으로 기록되게 한다. */
+  PR.dayStart = function () {
+    var h = PR.store && PR.store.state ? PR.store.state.dayStart : 4;
+    return (h === undefined || h === null) ? 4 : h;
+  };
+
+  function fmt(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  /* 날짜 → 'YYYY-MM-DD'. 인자를 생략하면 "지금이 속한 하루"(하루 시작 시각 반영).
+     인자를 주면 그 날짜를 그대로 포맷 — 날짜 순회 루프는 이 형태를 쓴다. */
+  PR.todayStr = function (d) {
+    if (d) return fmt(d);
+    var n = new Date();
+    var hs = PR.dayStart();
+    if (hs > 0 && n.getHours() < hs) n.setDate(n.getDate() - 1); // 새벽은 아직 어제
+    return fmt(n);
+  };
+
+  /* 논리적 '오늘'의 Date (정오 고정). 날짜를 거슬러 오르는 루프의 시작점으로 쓴다 —
+     여기서 new Date()를 그대로 쓰면 새벽에 하루가 어긋난다. */
+  PR.todayDate = function () {
+    return new Date(PR.todayStr() + 'T12:00:00');
+  };
+
+  /* 지금이 하루 시작 시각 이전인지 (= 어제로 기록되는 새벽 시간대) */
+  PR.inGraceHours = function () {
+    var hs = PR.dayStart();
+    return hs > 0 && new Date().getHours() < hs;
   };
 
   /* 해당 날짜가 속한 주의 월요일 (주간 쿼터 기준) */
@@ -225,7 +252,10 @@ button.hcell.today.done{background:var(--accent)}
       freezeMark: 0,         // 방어막을 지급한 최고 스트릭 눈금 (7일마다 +1)
       frozenDates: [],       // 방어막으로 보호된 날짜 (스트릭 유지에 성공으로 인정)
       lastReconcile: '',     // 마지막 일일 정산 날짜 (놓친 날 처리 기준)
-      penaltyOn: true };     // 목표 놓친 날 소액 차감 여부
+      penaltyOn: true,       // 목표 놓친 날 소액 차감 여부
+      /* v6: 하루 시작 시각 (0~6시). 이 시각 전은 아직 '어제'로 기록 — 자정 직후 완료의 억울함 방지.
+         normalize의 Object.assign(blank(), d)가 기존 데이터에도 기본값을 채워주므로 별도 마이그레이션 불필요 */
+      dayStart: 4 };
   }
 
   /* v1 → v2: 기본P = (수동P 또는 자동P) × 난이도 배율을 흡수 */
@@ -399,11 +429,6 @@ button.hcell.today.done{background:var(--accent)}
     });
   }
 
-  /* 연속 달성일 (스케줄 인식 + 방어막 반영).
-     - 완전 달성했거나 방어막으로 보호된 날 → 인정, 카운트
-     - 아무것도 안 했지만 예정도 없던 날(휴식일) → 중립(스트릭 유지, 카운트 안 함)
-     - 예정이 있었는데 놓친 날 → 스트릭 끊김
-     extraToday=true면 오늘은 완전 달성으로 간주 */
   /* 거슬러 올라갈 하한 — 반복 계획 시작일·기록·방어막 보호일 중 가장 이른 날.
      그보다 이전은 인정될 수도, 끊길 수도 없으므로 결과를 바꾸지 않고 순회만 아낀다. */
   function streakFloor() {
@@ -418,6 +443,11 @@ button.hcell.today.done{background:var(--accent)}
     return floor;
   }
 
+  /* 연속 달성일 (스케줄 인식 + 방어막 반영).
+     - 완전 달성했거나 방어막으로 보호된 날 → 인정, 카운트
+     - 아무것도 안 했지만 예정도 없던 날(휴식일) → 중립(스트릭 유지, 카운트 안 함)
+     - 예정이 있었는데 놓친 날 → 스트릭 끊김
+     extraToday=true면 오늘은 완전 달성으로 간주 */
   function computeStreak(extraToday) {
     var frozen = {};
     (PR.store.state.frozenDates || []).forEach(function (d) { frozen[d] = 1; });
@@ -426,7 +456,7 @@ button.hcell.today.done{background:var(--accent)}
     function met(ds) { return frozen[ds] || metOn(ds) || (extraToday && ds === todayS); }
 
     var cur = 0;
-    var d = new Date();
+    var d = PR.todayDate();
     if (!met(todayS)) d.setDate(d.getDate() - 1); // 오늘 미완료 = 아직 안 끊김
     for (var i = 0; i < 3650; i++) {
       var ds = PR.todayStr(d);
@@ -618,7 +648,7 @@ button.hcell.today.done{background:var(--accent)}
     var dates = {};
     PR.store.state.logs.forEach(function (l) { if (l.planId === p.id && l.full) dates[l.date] = 1; });
     var cur = 0;
-    var day = new Date();
+    var day = PR.todayDate();
     var ds = PR.todayStr(day);
     if (isScheduledOn(p, ds) && !dates[ds]) day.setDate(day.getDate() - 1); // 오늘 미완료 = 아직 안 끊김
     for (var j = 0; j < 3650; j++) {
@@ -682,6 +712,41 @@ button.hcell.today.done{background:var(--accent)}
     return got ? '<br><span style="opacity:.75">🛡 방어막 +' + got + ' (연속 ' + S.freezeMark + '일 달성)</span>' : '';
   }
 
+  /* 지난 날을 소급 완료해서 그 날이 '달성'이 되면, 그 날 때문에 치른 대가를 되돌린다.
+     - 방어막으로 보호됐던 날 → 보호 해제 + 방어막 1개 반환
+     - 차감됐던 날 → 그 날 몫만큼 포인트 환급 (정산 로그의 days에서 찾음)
+     되돌릴 게 있으면 안내 문구를 반환. */
+  function restoreForDate(ds) {
+    var S = PR.store.state;
+    var parts = [];
+
+    var fi = (S.frozenDates || []).indexOf(ds);
+    if (fi !== -1) {
+      S.frozenDates.splice(fi, 1);
+      if (S.freezes < FREEZE_CAP) S.freezes++;
+      parts.push('🛡 방어막 1개 돌려받음');
+    }
+
+    var back = 0;
+    S.logs = S.logs.filter(function (l) {
+      if (!l.penalty || !l.days || !l.days.length) return true;
+      var hit = 0;
+      var keep = [];
+      l.days.forEach(function (x) { if (x.ds === ds) hit += x.pen; else keep.push(x); });
+      if (!hit) return true;
+      back += hit;
+      l.days = keep;
+      l.pts += hit;        // pts는 음수 — 차감액이 줄어든다
+      return l.pts < 0;    // 전액 환급되면 정산 로그 자체를 없앰
+    });
+    if (back) {
+      S.points += back;
+      parts.push('🥶 차감했던 ' + back + 'P 돌려받음');
+    }
+
+    return parts.length ? '<br><span style="opacity:.75">' + parts.join(' · ') + '</span>' : '';
+  }
+
   var A = {};
 
   /* ---- 계획 완료/취소. input = {t:실제 분, q:실제 분량} ---- */
@@ -698,14 +763,16 @@ button.hcell.today.done{background:var(--accent)}
     S.logs.push({ id: PR.uid(), planId: id, date: a.doneDate, pts: total, r: a.r, full: a.full, duty: !!p.duty, onTime: a.onTime, surprise: sp.pts, retro: a.retro, ts: Date.now() });
     S.points += total;
     S.earned += total;
-    var freezeMsg = '';
+    var extraMsg = '';
     if (a.full && !p.duty && !a.retro) {
       S.bestStreak = Math.max(S.bestStreak, a.streak);
-      freezeMsg = grantFreezes(a.streak);
+      extraMsg = grantFreezes(a.streak);
     }
+    /* 소급 완료로 그 날이 달성이 됐다면 그때 쓴 방어막·차감 포인트를 되돌린다 */
+    if (a.full && !p.duty && a.retro) extraMsg = restoreForDate(a.doneDate);
     if (p.kind === 'deadline') p.done = true;
     commit();
-    awardToast(a, sp.pts, freezeMsg);
+    awardToast(a, sp.pts, extraMsg);
   };
 
   A.uncompletePlan = function (id, date) {
@@ -897,6 +964,16 @@ button.hcell.today.done{background:var(--accent)}
   };
 
   /* ---- 설정 ---- */
+  /* 하루 시작 시각 (0~6시). 자정 직후 완료가 '어제'로 기록되게 하는 유예 시간 */
+  A.setDayStart = function (h) {
+    var v = Math.max(0, Math.min(6, Number(h) || 0));
+    PR.store.state.dayStart = v;
+    commit();
+    PR.toast(v === 0
+      ? '하루 경계를 자정으로 맞췄어요'
+      : '새벽 ' + v + '시까지는 어제로 기록돼요 🌙');
+  };
+
   A.setPenalty = function (on) {
     PR.store.state.penaltyOn = !!on;
     commit();
@@ -959,23 +1036,40 @@ button.hcell.today.done{background:var(--accent)}
       d.setDate(d.getDate() + 1);
     }
 
-    var saved = 0, penDays = 0, penalty = 0;
+    /* 어느 날짜에서 얼마를 깎았는지 days에 남긴다 — 그 날을 나중에 소급 완료하면
+       정확히 그만큼만 되돌려주기 위해서. 총액만 남기면 환급액을 알 수 없다. */
+    var saved = 0, penalty = 0;
+    var applied = [];
     missed.forEach(function (m) {
       if (S.freezes > 0) {                 // 방어막으로 보호
         S.freezes--;
         S.frozenDates.push(m.ds);
         saved++;
-      } else if (S.penaltyOn) {            // 소액 차감
-        penalty += m.pen;
-        penDays++;
+      } else if (S.penaltyOn) {            // 소액 차감 (상한까지만)
+        var room = PENALTY_CAP - penalty;
+        if (room <= 0) return;
+        var pen = Math.min(m.pen, room);
+        penalty += pen;
+        applied.push({ ds: m.ds, pen: pen });
       }
     });
 
+    /* 포인트가 모자라 다 못 깎으면, 실제로 깎은 날만 기록에 남긴다 */
+    if (penalty > S.points) {
+      var acc = 0;
+      applied = applied.filter(function (a) {
+        if (acc + a.pen > S.points) return false;
+        acc += a.pen;
+        return true;
+      });
+      penalty = acc;
+    }
+    var penDays = applied.length;
+
     if (penalty > 0) {
-      penalty = Math.min(penalty, PENALTY_CAP);
       S.points = Math.max(0, S.points - penalty);
       S.logs.push({ id: PR.uid(), planId: 'penalty', date: today, pts: -penalty,
-        r: 0, full: false, duty: true, onTime: false, penalty: true, ts: Date.now() });
+        r: 0, full: false, duty: true, onTime: false, penalty: true, days: applied, ts: Date.now() });
     }
 
     S.lastReconcile = today;
@@ -1226,8 +1320,31 @@ button.hcell.today.done{background:var(--accent)}
       '<div class="sub" style="margin-top:3px">' + done + '/' + total + ' 단계 (' + pct + '%)</div>';
   }
 
-  /* 완료 입력 폼 (목표가 있는 계획용). idPrefix로 요소 구분 */
-  function completeForm(p, idPrefix) {
+  /* 완료 입력이 필요한 계획인지 (목표치 입력 / 정시 확인 / 완료일 선택) */
+  function needsForm(p, forceOnTime) {
+    if (p.targetT || p.targetQ || p.kind === 'deadline') return true;
+    if (!p.time) return false;
+    if (forceOnTime) return true;
+    var n = new Date();
+    return !PR.points.inWindow(p, n.getHours() * 60 + n.getMinutes());
+  }
+
+  /* 완료 폼에서 입력값 읽기 (요소가 없으면 그 항목은 생략) */
+  function readCompleteForm(idPrefix) {
+    var g = function (s) { return document.getElementById(idPrefix + '-' + s); };
+    var tEl = g('t'), qEl = g('q'), dEl = g('d'), tmEl = g('tm');
+    return {
+      t: tEl ? tEl.value : 0,
+      q: qEl ? qEl.value : 0,
+      date: dEl ? dEl.value : undefined,
+      ontime: tmEl ? tmEl.checked : undefined
+    };
+  }
+
+  /* 완료 입력 폼 (목표가 있는 계획용). idPrefix로 요소 구분.
+     opts.forceOnTime: 지금 시각과 무관하게 정시 체크박스를 띄운다 (지난 날 소급 완료용) */
+  function completeForm(p, idPrefix, opts) {
+    opts = opts || {};
     var h = '<div class="cform" id="' + idPrefix + '-form">';
     if (p.kind === 'deadline') {
       var today = PR.todayStr();
@@ -1235,7 +1352,7 @@ button.hcell.today.done{background:var(--accent)}
     }
     if (p.time) {
       var n = new Date();
-      var within = PR.points.inWindow(p, n.getHours() * 60 + n.getMinutes());
+      var within = !opts.forceOnTime && PR.points.inWindow(p, n.getHours() * 60 + n.getMinutes());
       if (!within) { // 지금이 시간대 안이면 물어볼 필요 없이 자동 인정 (체크박스 생략)
         h += '<label style="display:flex; align-items:center; gap:6px; cursor:pointer; flex-basis:100%; margin:0 0 2px">' +
           '<input type="checkbox" id="' + idPrefix + '-tm" style="width:auto">' +
@@ -1253,7 +1370,8 @@ button.hcell.today.done{background:var(--accent)}
   }
 
   PR.vh = { planChips: planChips, rangeFields: rangeFields, readRange: readRange,
-            progressBar: progressBar, completeForm: completeForm };
+            progressBar: progressBar, completeForm: completeForm,
+            needsForm: needsForm, readCompleteForm: readCompleteForm };
 })(window.PR = window.PR || {});
 
 /* ===== components/hero.js ===== */
@@ -1301,7 +1419,7 @@ button.hcell.today.done{background:var(--accent)}
   function last7() {
     var out = [];
     for (var i = 6; i >= 0; i--) {
-      var d = new Date(); d.setDate(d.getDate() - i);
+      var d = PR.todayDate(); d.setDate(d.getDate() - i);
       out.push(PR.todayStr(d));
     }
     return out;
@@ -1478,11 +1596,9 @@ button.hcell.today.done{background:var(--accent)}
 
   function planRow(p) {
     var done = !!PR.sched.todayLog(p.id);
-    var n0 = new Date();
-    var outOfWindow = p.time && !PR.points.inWindow(p, n0.getHours() * 60 + n0.getMinutes());
     /* 폼이 필요한 경우: 실제 수행량 입력(목표), 완료일 입력(마감형),
        시간대 밖 완료(정시 여부 확인). 시간대 안이면 자동 인정이라 물어보지 않음 */
-    var needForm = p.targetT || p.targetQ || p.kind === 'deadline' || outOfWindow;
+    var needForm = PR.vh.needsForm(p);
     var quota = '';
     if (p.kind === 'routine' && p.freq && p.freq.type === 'weekly') {
       var k = PR.sched.weekFullCount(p.id);
@@ -1516,8 +1632,13 @@ button.hcell.today.done{background:var(--accent)}
     render: function () {
       var S = PR.store.state;
       var today = PR.todayStr();
-      var now = new Date();
+      var now = PR.todayDate();
       var out = '<h2>' + (now.getMonth() + 1) + '월 ' + now.getDate() + '일 (' + PR.DAYS[now.getDay()] + ') 오늘</h2>';
+      /* 새벽(하루 시작 시각 이전)에는 아직 어제로 기록된다는 걸 알려준다 */
+      if (PR.inGraceHours()) {
+        out += '<div class="sub" style="margin:-4px 0 8px">🌙 지금은 아직 <b>' + (now.getMonth() + 1) + '/' + now.getDate() +
+          '</b>로 기록돼요 (새벽 ' + PR.dayStart() + '시까지) — 자정 넘겨 끝내도 손해 없어요</div>';
+      }
 
       /* 1. 오늘의 습관 (단순 토글) */
       var habits = S.plans.filter(function (p) { return p.kind === 'habit' && PR.sched.isScheduledOn(p, today); });
@@ -1603,13 +1724,8 @@ button.hcell.today.done{background:var(--accent)}
         if (b.dataset.donex) { openId = null; PR.actions.completePlan(b.dataset.donex, {}); }
         if (b.dataset.confirm) {
           var id = b.dataset.confirm;
-          var tEl = document.getElementById('c' + id + '-t');
-          var qEl = document.getElementById('c' + id + '-q');
-          var dEl = document.getElementById('c' + id + '-d');
-          var tmEl = document.getElementById('c' + id + '-tm');
           openId = null;
-          PR.actions.completePlan(id, { t: tEl ? tEl.value : 0, q: qEl ? qEl.value : 0,
-            date: dEl ? dEl.value : undefined, ontime: tmEl ? tmEl.checked : undefined });
+          PR.actions.completePlan(id, PR.vh.readCompleteForm('c' + id));
         }
         if (b.dataset.undo && confirm('완료를 취소할까요? 받은 포인트가 회수됩니다.')) PR.actions.uncompletePlan(b.dataset.undo);
         if (b.id === 'ad-add') {
@@ -2150,7 +2266,7 @@ button.hcell.today.done{background:var(--accent)}
       /* 최근 7일 포인트 (마일스톤/완주 보너스/페널티 포함 = 순증감) */
       var days = [];
       for (var i = 6; i >= 0; i--) {
-        var d = new Date(); d.setDate(d.getDate() - i);
+        var d = PR.todayDate(); d.setDate(d.getDate() - i);
         days.push(PR.todayStr(d));
       }
       var daily = days.map(function (ds) {
@@ -2171,7 +2287,7 @@ button.hcell.today.done{background:var(--accent)}
       var sched = 0, done = 0;
       /* 요일 고정(습관/반복): 일 단위 */
       for (var j = 0; j < 30; j++) {
-        var d2 = new Date(); d2.setDate(d2.getDate() - j);
+        var d2 = PR.todayDate(); d2.setDate(d2.getDate() - j);
         var ds2 = PR.todayStr(d2);
         S.plans.forEach(function (p) {
           if ((p.kind !== 'habit' && p.kind !== 'routine') || (p.freq && p.freq.type === 'weekly')) return;
@@ -2182,7 +2298,7 @@ button.hcell.today.done{background:var(--accent)}
       }
       /* 주 n회(습관/반복): 주 단위 (최근 4주) */
       for (var w = 0; w < 4; w++) {
-        var wd = new Date(); wd.setDate(wd.getDate() - w * 7);
+        var wd = PR.todayDate(); wd.setDate(wd.getDate() - w * 7);
         var wk = PR.weekKey(PR.todayStr(wd));
         S.plans.forEach(function (p) {
           if ((p.kind !== 'habit' && p.kind !== 'routine') || !p.freq || p.freq.type !== 'weekly') return;
@@ -2247,6 +2363,17 @@ button.hcell.today.done{background:var(--accent)}
           '<input type="file" id="s-file" accept=".json" class="hidden">' +
         '</div>' +
         '<div class="card">' +
+          '<div style="font-weight:700; margin-bottom:8px">🌙 하루 시작 시각</div>' +
+          '<div class="sub" style="line-height:1.6; margin-bottom:8px">이 시각 전까지는 아직 <b>어제</b>로 기록돼요.<br>' +
+            '<span style="opacity:.7">자정 넘겨 끝냈다고 보너스를 놓치는 일이 없어요</span></div>' +
+          '<div class="row" style="flex-wrap:wrap">' +
+            [0, 2, 3, 4, 5, 6].map(function (h) {
+              return '<button class="grow small ' + (S.dayStart === h ? '' : 'gray') + '" data-ds="' + h + '">' +
+                (h === 0 ? '자정' : '새벽 ' + h + '시') + '</button>';
+            }).join('') +
+          '</div>' +
+        '</div>' +
+        '<div class="card">' +
           '<div style="font-weight:700; margin-bottom:8px">🎯 보상 규칙</div>' +
           '<div class="row" style="align-items:center; justify-content:space-between">' +
             '<div class="sub" style="line-height:1.6; flex:1">예정된 계획을 놓친 날 소액 차감<br>' +
@@ -2268,6 +2395,7 @@ button.hcell.today.done{background:var(--accent)}
       root.onclick = function (e) {
         var b = e.target.closest('button');
         if (!b) return;
+        if (b.dataset.ds !== undefined) { PR.actions.setDayStart(b.dataset.ds); return; }
         if (b.id === 's-penalty') PR.actions.setPenalty(!PR.store.state.penaltyOn);
         if (b.id === 's-export') PR.sync.exportData();
         if (b.id === 's-import') document.getElementById('s-file').click();
@@ -2285,16 +2413,29 @@ button.hcell.today.done{background:var(--accent)}
 })(window.PR = window.PR || {});
 
 /* ===== components/calendar.js ===== */
-/* 달력 탭: 월간 예정 + 달성 기록. 날짜를 누르면 그날 상세 */
+/* 달력 탭: 월간 예정 + 달성 기록. 날짜를 누르면 그날 상세.
+   상세에서 지난 날짜도 뒤늦게 완료/취소할 수 있다 (RETRO_DAYS 이내).
+   소급 완료는 스트릭·정시·서프라이즈 보너스가 붙지 않지만(points.js의 retro 처리),
+   그 날 때문에 소모된 방어막·차감 포인트는 되돌려 받는다(actions.restoreForDate). */
 (function (PR) {
   'use strict';
 
   var cur = null;      // {y, m} 표시 중인 달
   var selected = null; // 선택된 날짜 'YYYY-MM-DD'
+  var openId = null;   // 소급 완료 입력 폼이 열린 계획 id
+
+  var RETRO_DAYS = 14; // 이 기간 안의 지난 날만 뒤늦게 손댈 수 있음
+
+  /* 그 날짜를 지금 완료/취소할 수 있는지 (미래 불가, 너무 오래된 과거도 불가) */
+  function canAct(ds) {
+    var today = PR.todayStr();
+    if (ds > today) return false;
+    return PR.daysBetween(ds, today) <= RETRO_DAYS;
+  }
 
   function initState() {
     if (!cur) {
-      var n = new Date();
+      var n = PR.todayDate();
       cur = { y: n.getFullYear(), m: n.getMonth() };
       selected = PR.todayStr();
     }
@@ -2352,18 +2493,36 @@ button.hcell.today.done{background:var(--accent)}
       rows.push('<div class="hist"><span>📌 마감: <b>' + PR.esc(p.title) + '</b> <span class="pts">' + p.basePts + 'P</span></span>' +
         (p.done ? '<span class="chip d1">완료 ✓</span>' : (ds < today ? '<span class="chip d3">미완료</span>' : '')) + '</div>');
     });
+    var act = canAct(ds);
     info.due.forEach(function (p) {
       var weekly = p.freq && p.freq.type === 'weekly';
       var did = !!info.doneIds[p.id];
-      /* 주 n회: 특정일 약속이 아니므로 미래엔 표시 안 함, 과거엔 실제로 한 날만 ✓ */
+      /* 주 n회: 특정일 약속이 아니므로 미래엔 표시 안 함.
+         과거엔 실제로 한 날만 ✓ — 단 소급 가능 기간이면 "그날 했었다"고 기록할 수 있게 보여준다 */
       if (weekly && ds > today) return;
-      if (weekly && ds < today && !did) return;
+      if (weekly && ds < today && !did && !act) return;
       var icon = p.kind === 'habit' ? '🌱' : '🔁';
       var mark = '';
       if (ds <= today) mark = did ? '<span class="chip d1">✓</span>'
         : (ds < today && !weekly ? '<span class="chip" style="background:#f0f0f5;color:#999">✗</span>' : '');
+
+      var btn = '';
+      if (act) {
+        if (did) {
+          btn = '<button class="gray small" data-cundo="' + p.id + '">취소</button>';
+        } else if (PR.vh.needsForm(p, true)) {
+          btn = '<button class="small ' + (openId === p.id ? 'gray' : '') + '" data-copen="' + p.id + '">' +
+            (openId === p.id ? '닫기' : '완료') + '</button>';
+        } else {
+          btn = '<button class="small" data-cdone="' + p.id + '">완료</button>';
+        }
+      }
       rows.push('<div class="hist"><span>' + icon + ' ' + PR.esc(p.title) +
-        (p.duty ? ' <span class="chip" style="background:#e8e8ee;color:#777">의무</span>' : '') + '</span>' + mark + '</div>');
+        (p.duty ? ' <span class="chip" style="background:#e8e8ee;color:#777">의무</span>' : '') + '</span>' +
+        '<span>' + mark + ' ' + btn + '</span></div>');
+      if (act && !did && openId === p.id) {
+        rows.push(PR.vh.completeForm(p, 'k' + p.id, { forceOnTime: true }));
+      }
     });
     info.adhoc.forEach(function (l) {
       rows.push('<div class="hist"><span>🔖 ' + PR.esc(l.title || '') + '</span><span class="pts">+' + l.pts + 'P</span></div>');
@@ -2378,6 +2537,12 @@ button.hcell.today.done{background:var(--accent)}
         (dayPts ? '<span class="pts">' + (dayPts > 0 ? '+' : '') + dayPts + 'P</span>' : '') + '</div>' +
       (rows.length ? '<div style="margin-top:6px">' + rows.join('') + '</div>'
         : '<div class="empty" style="padding:14px 0">이날은 예정도 기록도 없어요</div>') +
+      (ds < today && act
+        ? '<div class="sub" style="margin-top:8px">🕓 지난 날도 여기서 완료할 수 있어요 — 그날 쓴 방어막·차감 포인트는 돌려받고, 스트릭·정시·서프라이즈 보너스는 빠져요</div>'
+        : '') +
+      (ds < today && !act
+        ? '<div class="sub" style="margin-top:8px">' + RETRO_DAYS + '일이 지난 날은 수정할 수 없어요</div>'
+        : '') +
     '</div>';
   }
 
@@ -2415,17 +2580,34 @@ button.hcell.today.done{background:var(--accent)}
       root.onclick = function (e) {
         var b = e.target.closest('button');
         if (!b) return;
-        if (b.dataset.day) { selected = b.dataset.day; PR.app.render(); return; }
-        if (b.dataset.cal === 'prev') { cur.m--; if (cur.m < 0) { cur.m = 11; cur.y--; } PR.app.render(); }
-        if (b.dataset.cal === 'next') { cur.m++; if (cur.m > 11) { cur.m = 0; cur.y++; } PR.app.render(); }
+        if (b.dataset.day) { selected = b.dataset.day; openId = null; PR.app.render(); return; }
+        if (b.dataset.cal === 'prev') { cur.m--; if (cur.m < 0) { cur.m = 11; cur.y--; } openId = null; PR.app.render(); }
+        if (b.dataset.cal === 'next') { cur.m++; if (cur.m > 11) { cur.m = 0; cur.y++; } openId = null; PR.app.render(); }
         if (b.dataset.cal === 'now') {
-          var n = new Date();
+          var n = PR.todayDate();
           cur = { y: n.getFullYear(), m: n.getMonth() };
           selected = PR.todayStr();
+          openId = null;
           PR.app.render();
         }
+
+        /* ---- 그 날짜에 대한 완료/취소 (소급 기록) ---- */
+        if (b.dataset.copen) { openId = openId === b.dataset.copen ? null : b.dataset.copen; PR.app.render(); }
+        if (b.dataset.cdone) { openId = null; PR.actions.completePlan(b.dataset.cdone, { date: selected }); }
+        if (b.dataset.confirm) {
+          var id = b.dataset.confirm;
+          var input = PR.vh.readCompleteForm('k' + id);
+          input.date = selected; // 달력에서는 선택한 날짜로 고정
+          openId = null;
+          PR.actions.completePlan(id, input);
+        }
+        if (b.dataset.cundo && confirm('이 날의 완료를 취소할까요? 받은 포인트가 회수됩니다.')) {
+          PR.actions.uncompletePlan(b.dataset.cundo, selected);
+        }
       };
-    }
+    },
+
+    onNavAway: function () { openId = null; }
   });
 })(window.PR = window.PR || {});
 

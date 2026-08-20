@@ -69,7 +69,7 @@
     var dates = {};
     PR.store.state.logs.forEach(function (l) { if (l.planId === p.id && l.full) dates[l.date] = 1; });
     var cur = 0;
-    var day = new Date();
+    var day = PR.todayDate();
     var ds = PR.todayStr(day);
     if (isScheduledOn(p, ds) && !dates[ds]) day.setDate(day.getDate() - 1); // 오늘 미완료 = 아직 안 끊김
     for (var j = 0; j < 3650; j++) {

@@ -12,7 +12,7 @@
   function last7() {
     var out = [];
     for (var i = 6; i >= 0; i--) {
-      var d = new Date(); d.setDate(d.getDate() - i);
+      var d = PR.todayDate(); d.setDate(d.getDate() - i);
       out.push(PR.todayStr(d));
     }
     return out;

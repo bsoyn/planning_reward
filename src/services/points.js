@@ -45,11 +45,6 @@
     });
   }
 
-  /* 연속 달성일 (스케줄 인식 + 방어막 반영).
-     - 완전 달성했거나 방어막으로 보호된 날 → 인정, 카운트
-     - 아무것도 안 했지만 예정도 없던 날(휴식일) → 중립(스트릭 유지, 카운트 안 함)
-     - 예정이 있었는데 놓친 날 → 스트릭 끊김
-     extraToday=true면 오늘은 완전 달성으로 간주 */
   /* 거슬러 올라갈 하한 — 반복 계획 시작일·기록·방어막 보호일 중 가장 이른 날.
      그보다 이전은 인정될 수도, 끊길 수도 없으므로 결과를 바꾸지 않고 순회만 아낀다. */
   function streakFloor() {
@@ -64,6 +59,11 @@
     return floor;
   }
 
+  /* 연속 달성일 (스케줄 인식 + 방어막 반영).
+     - 완전 달성했거나 방어막으로 보호된 날 → 인정, 카운트
+     - 아무것도 안 했지만 예정도 없던 날(휴식일) → 중립(스트릭 유지, 카운트 안 함)
+     - 예정이 있었는데 놓친 날 → 스트릭 끊김
+     extraToday=true면 오늘은 완전 달성으로 간주 */
   function computeStreak(extraToday) {
     var frozen = {};
     (PR.store.state.frozenDates || []).forEach(function (d) { frozen[d] = 1; });
@@ -72,7 +72,7 @@
     function met(ds) { return frozen[ds] || metOn(ds) || (extraToday && ds === todayS); }
 
     var cur = 0;
-    var d = new Date();
+    var d = PR.todayDate();
     if (!met(todayS)) d.setDate(d.getDate() - 1); // 오늘 미완료 = 아직 안 끊김
     for (var i = 0; i < 3650; i++) {
       var ds = PR.todayStr(d);

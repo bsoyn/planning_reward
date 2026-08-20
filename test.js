@@ -156,5 +156,85 @@ const ptsBefore = S().points;
 PR.actions.refundTicket(usedT.id);
 ok('이미 쓴 티켓은 환불 불가', S().points === ptsBefore && S().purchases.some(p => p.id === usedT.id));
 
+console.log('\n[7] 하루 시작 시각 (자정 넘김)');
+/* 시각을 갈아끼우기 위해 Date를 감싼다 — 컨텍스트의 Date만 바꾸면 모듈들이 그걸 쓴다 */
+const RealDate = Date;
+function atClock(h, m) {
+  const base = new RealDate();
+  base.setHours(h, m || 0, 0, 0);
+  class FakeDate extends RealDate {
+    constructor(...a) { super(...(a.length ? a : [base.getTime()])); }
+    static now() { return base.getTime(); }
+  }
+  ctx.Date = FakeDate;
+}
+function realClock() { ctx.Date = RealDate; }
+
+PR.store.state = PR.store.normalize({
+  v: 6, points: 0, earned: 0, bestStreak: 0, freezes: 1, freezeMark: 0, frozenDates: [], lastReconcile: today,
+  penaltyOn: true, dayStart: 4, plans: [], logs: [], projects: [], rewards: [], purchases: []
+});
+ok('기본 하루 시작 4시', PR.dayStart() === 4);
+
+const calendarToday = PR.todayStr(new RealDate());
+atClock(2, 30);
+ok('새벽 2시 30분은 아직 어제', PR.todayStr() !== calendarToday);
+ok('유예 시간대로 인식', PR.inGraceHours() === true);
+ok('todayDate도 어제를 가리킴', PR.todayStr(PR.todayDate()) === PR.todayStr());
+
+atClock(10, 0);
+ok('아침 10시는 오늘', PR.todayStr() === calendarToday);
+ok('유예 시간대 아님', PR.inGraceHours() === false);
+
+atClock(2, 30);
+PR.store.state.dayStart = 0;
+ok('자정 기준이면 새벽도 오늘', PR.todayStr() === calendarToday);
+PR.store.state.dayStart = 4;
+
+/* 새벽에 스트릭이 어긋나지 않는지 — 루프 시작점이 new Date()면 여기서 0이 된다 */
+atClock(1, 0);
+const logical = PR.todayStr();
+PR.store.state.plans = [{ id: 'n1', title: '야간', kind: 'routine', duty: false, basePts: 30, active: true,
+  freq: { type: 'days', days: [] }, startDate: logical, endDate: '' }];
+PR.store.state.logs = [{ id: 'nl1', planId: 'n1', date: logical, full: true, duty: false }];
+ok('새벽에 완료해도 스트릭 1일로 잡힘', PR.points.computeStreak(false) === 1);
+ok('소급(retro) 아님 → 보너스 유지', PR.points.calcAward(
+  { kind: 'routine', basePts: 30, duty: false }, {}).retro === false);
+realClock();
+
+console.log('\n[8] 소급 완료 시 방어막·차감 되돌리기');
+const missedDay = daysAgo(2);
+PR.store.state = PR.store.normalize({
+  v: 6, points: 100, earned: 100, bestStreak: 0, freezes: 0, freezeMark: 0,
+  frozenDates: [daysAgo(3)], lastReconcile: today, penaltyOn: true, dayStart: 4,
+  plans: [{ id: 'pd', title: '독서', kind: 'routine', duty: false, basePts: 30, active: true,
+            freq: { type: 'days', days: [] }, startDate: daysAgo(10), endDate: '' }],
+  logs: [{ id: 'pen1', planId: 'penalty', date: today, pts: -14, penalty: true, duty: true, full: false,
+           days: [{ ds: missedDay, pen: 6 }, { ds: daysAgo(4), pen: 8 }] }],
+  projects: [], rewards: [], purchases: []
+});
+PR.actions.completePlan('pd', { date: missedDay });
+ok('차감분만 정확히 환급 (6P)', PR.store.state.logs.find(l => l.penalty).pts === -8);
+ok('남은 차감 날짜는 유지', PR.store.state.logs.find(l => l.penalty).days.length === 1);
+const gained = PR.store.state.logs.find(l => l.planId === 'pd').pts;
+ok('포인트 = 기존 + 지급 + 환급', PR.store.state.points === 100 + gained + 6);
+ok('소급 완료는 스트릭 보너스 없음', gained === 30);
+
+/* 방어막으로 보호됐던 날을 소급 완료 */
+PR.actions.completePlan('pd', { date: daysAgo(3) });
+ok('방어막 보호일 해제', PR.store.state.frozenDates.indexOf(daysAgo(3)) === -1);
+ok('방어막 1개 반환', PR.store.state.freezes === 1);
+
+/* 남은 차감이 전부 환급되면 정산 로그 자체가 사라짐 */
+PR.actions.completePlan('pd', { date: daysAgo(4) });
+ok('전액 환급 시 정산 로그 제거', !PR.store.state.logs.some(l => l.penalty));
+
+console.log('\n[9] 소급 완료 방어 규칙');
+const before9 = PR.store.state.points;
+PR.actions.completePlan('pd', { date: missedDay });
+ok('같은 날 중복 완료 차단', PR.store.state.points === before9);
+const future = PR.points.calcAward({ kind: 'routine', basePts: 30, duty: false }, { date: '2099-01-01' });
+ok('미래 날짜는 오늘로 고정', future.doneDate === PR.todayStr());
+
 console.log('\n' + (fail ? '실패 ' + fail + '건 / ' : '') + '통과 ' + pass + '건');
 process.exit(fail ? 1 : 0);

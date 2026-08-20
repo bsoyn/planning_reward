@@ -1,13 +1,26 @@
-/* 달력 탭: 월간 예정 + 달성 기록. 날짜를 누르면 그날 상세 */
+/* 달력 탭: 월간 예정 + 달성 기록. 날짜를 누르면 그날 상세.
+   상세에서 지난 날짜도 뒤늦게 완료/취소할 수 있다 (RETRO_DAYS 이내).
+   소급 완료는 스트릭·정시·서프라이즈 보너스가 붙지 않지만(points.js의 retro 처리),
+   그 날 때문에 소모된 방어막·차감 포인트는 되돌려 받는다(actions.restoreForDate). */
 (function (PR) {
   'use strict';
 
   var cur = null;      // {y, m} 표시 중인 달
   var selected = null; // 선택된 날짜 'YYYY-MM-DD'
+  var openId = null;   // 소급 완료 입력 폼이 열린 계획 id
+
+  var RETRO_DAYS = 14; // 이 기간 안의 지난 날만 뒤늦게 손댈 수 있음
+
+  /* 그 날짜를 지금 완료/취소할 수 있는지 (미래 불가, 너무 오래된 과거도 불가) */
+  function canAct(ds) {
+    var today = PR.todayStr();
+    if (ds > today) return false;
+    return PR.daysBetween(ds, today) <= RETRO_DAYS;
+  }
 
   function initState() {
     if (!cur) {
-      var n = new Date();
+      var n = PR.todayDate();
       cur = { y: n.getFullYear(), m: n.getMonth() };
       selected = PR.todayStr();
     }
@@ -65,18 +78,36 @@
       rows.push('<div class="hist"><span>📌 마감: <b>' + PR.esc(p.title) + '</b> <span class="pts">' + p.basePts + 'P</span></span>' +
         (p.done ? '<span class="chip d1">완료 ✓</span>' : (ds < today ? '<span class="chip d3">미완료</span>' : '')) + '</div>');
     });
+    var act = canAct(ds);
     info.due.forEach(function (p) {
       var weekly = p.freq && p.freq.type === 'weekly';
       var did = !!info.doneIds[p.id];
-      /* 주 n회: 특정일 약속이 아니므로 미래엔 표시 안 함, 과거엔 실제로 한 날만 ✓ */
+      /* 주 n회: 특정일 약속이 아니므로 미래엔 표시 안 함.
+         과거엔 실제로 한 날만 ✓ — 단 소급 가능 기간이면 "그날 했었다"고 기록할 수 있게 보여준다 */
       if (weekly && ds > today) return;
-      if (weekly && ds < today && !did) return;
+      if (weekly && ds < today && !did && !act) return;
       var icon = p.kind === 'habit' ? '🌱' : '🔁';
       var mark = '';
       if (ds <= today) mark = did ? '<span class="chip d1">✓</span>'
         : (ds < today && !weekly ? '<span class="chip" style="background:#f0f0f5;color:#999">✗</span>' : '');
+
+      var btn = '';
+      if (act) {
+        if (did) {
+          btn = '<button class="gray small" data-cundo="' + p.id + '">취소</button>';
+        } else if (PR.vh.needsForm(p, true)) {
+          btn = '<button class="small ' + (openId === p.id ? 'gray' : '') + '" data-copen="' + p.id + '">' +
+            (openId === p.id ? '닫기' : '완료') + '</button>';
+        } else {
+          btn = '<button class="small" data-cdone="' + p.id + '">완료</button>';
+        }
+      }
       rows.push('<div class="hist"><span>' + icon + ' ' + PR.esc(p.title) +
-        (p.duty ? ' <span class="chip" style="background:#e8e8ee;color:#777">의무</span>' : '') + '</span>' + mark + '</div>');
+        (p.duty ? ' <span class="chip" style="background:#e8e8ee;color:#777">의무</span>' : '') + '</span>' +
+        '<span>' + mark + ' ' + btn + '</span></div>');
+      if (act && !did && openId === p.id) {
+        rows.push(PR.vh.completeForm(p, 'k' + p.id, { forceOnTime: true }));
+      }
     });
     info.adhoc.forEach(function (l) {
       rows.push('<div class="hist"><span>🔖 ' + PR.esc(l.title || '') + '</span><span class="pts">+' + l.pts + 'P</span></div>');
@@ -91,6 +122,12 @@
         (dayPts ? '<span class="pts">' + (dayPts > 0 ? '+' : '') + dayPts + 'P</span>' : '') + '</div>' +
       (rows.length ? '<div style="margin-top:6px">' + rows.join('') + '</div>'
         : '<div class="empty" style="padding:14px 0">이날은 예정도 기록도 없어요</div>') +
+      (ds < today && act
+        ? '<div class="sub" style="margin-top:8px">🕓 지난 날도 여기서 완료할 수 있어요 — 그날 쓴 방어막·차감 포인트는 돌려받고, 스트릭·정시·서프라이즈 보너스는 빠져요</div>'
+        : '') +
+      (ds < today && !act
+        ? '<div class="sub" style="margin-top:8px">' + RETRO_DAYS + '일이 지난 날은 수정할 수 없어요</div>'
+        : '') +
     '</div>';
   }
 
@@ -128,16 +165,33 @@
       root.onclick = function (e) {
         var b = e.target.closest('button');
         if (!b) return;
-        if (b.dataset.day) { selected = b.dataset.day; PR.app.render(); return; }
-        if (b.dataset.cal === 'prev') { cur.m--; if (cur.m < 0) { cur.m = 11; cur.y--; } PR.app.render(); }
-        if (b.dataset.cal === 'next') { cur.m++; if (cur.m > 11) { cur.m = 0; cur.y++; } PR.app.render(); }
+        if (b.dataset.day) { selected = b.dataset.day; openId = null; PR.app.render(); return; }
+        if (b.dataset.cal === 'prev') { cur.m--; if (cur.m < 0) { cur.m = 11; cur.y--; } openId = null; PR.app.render(); }
+        if (b.dataset.cal === 'next') { cur.m++; if (cur.m > 11) { cur.m = 0; cur.y++; } openId = null; PR.app.render(); }
         if (b.dataset.cal === 'now') {
-          var n = new Date();
+          var n = PR.todayDate();
           cur = { y: n.getFullYear(), m: n.getMonth() };
           selected = PR.todayStr();
+          openId = null;
           PR.app.render();
         }
+
+        /* ---- 그 날짜에 대한 완료/취소 (소급 기록) ---- */
+        if (b.dataset.copen) { openId = openId === b.dataset.copen ? null : b.dataset.copen; PR.app.render(); }
+        if (b.dataset.cdone) { openId = null; PR.actions.completePlan(b.dataset.cdone, { date: selected }); }
+        if (b.dataset.confirm) {
+          var id = b.dataset.confirm;
+          var input = PR.vh.readCompleteForm('k' + id);
+          input.date = selected; // 달력에서는 선택한 날짜로 고정
+          openId = null;
+          PR.actions.completePlan(id, input);
+        }
+        if (b.dataset.cundo && confirm('이 날의 완료를 취소할까요? 받은 포인트가 회수됩니다.')) {
+          PR.actions.uncompletePlan(b.dataset.cundo, selected);
+        }
       };
-    }
+    },
+
+    onNavAway: function () { openId = null; }
   });
 })(window.PR = window.PR || {});

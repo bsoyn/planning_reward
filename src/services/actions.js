@@ -35,6 +35,41 @@
     return got ? '<br><span style="opacity:.75">🛡 방어막 +' + got + ' (연속 ' + S.freezeMark + '일 달성)</span>' : '';
   }
 
+  /* 지난 날을 소급 완료해서 그 날이 '달성'이 되면, 그 날 때문에 치른 대가를 되돌린다.
+     - 방어막으로 보호됐던 날 → 보호 해제 + 방어막 1개 반환
+     - 차감됐던 날 → 그 날 몫만큼 포인트 환급 (정산 로그의 days에서 찾음)
+     되돌릴 게 있으면 안내 문구를 반환. */
+  function restoreForDate(ds) {
+    var S = PR.store.state;
+    var parts = [];
+
+    var fi = (S.frozenDates || []).indexOf(ds);
+    if (fi !== -1) {
+      S.frozenDates.splice(fi, 1);
+      if (S.freezes < FREEZE_CAP) S.freezes++;
+      parts.push('🛡 방어막 1개 돌려받음');
+    }
+
+    var back = 0;
+    S.logs = S.logs.filter(function (l) {
+      if (!l.penalty || !l.days || !l.days.length) return true;
+      var hit = 0;
+      var keep = [];
+      l.days.forEach(function (x) { if (x.ds === ds) hit += x.pen; else keep.push(x); });
+      if (!hit) return true;
+      back += hit;
+      l.days = keep;
+      l.pts += hit;        // pts는 음수 — 차감액이 줄어든다
+      return l.pts < 0;    // 전액 환급되면 정산 로그 자체를 없앰
+    });
+    if (back) {
+      S.points += back;
+      parts.push('🥶 차감했던 ' + back + 'P 돌려받음');
+    }
+
+    return parts.length ? '<br><span style="opacity:.75">' + parts.join(' · ') + '</span>' : '';
+  }
+
   var A = {};
 
   /* ---- 계획 완료/취소. input = {t:실제 분, q:실제 분량} ---- */
@@ -51,14 +86,16 @@
     S.logs.push({ id: PR.uid(), planId: id, date: a.doneDate, pts: total, r: a.r, full: a.full, duty: !!p.duty, onTime: a.onTime, surprise: sp.pts, retro: a.retro, ts: Date.now() });
     S.points += total;
     S.earned += total;
-    var freezeMsg = '';
+    var extraMsg = '';
     if (a.full && !p.duty && !a.retro) {
       S.bestStreak = Math.max(S.bestStreak, a.streak);
-      freezeMsg = grantFreezes(a.streak);
+      extraMsg = grantFreezes(a.streak);
     }
+    /* 소급 완료로 그 날이 달성이 됐다면 그때 쓴 방어막·차감 포인트를 되돌린다 */
+    if (a.full && !p.duty && a.retro) extraMsg = restoreForDate(a.doneDate);
     if (p.kind === 'deadline') p.done = true;
     commit();
-    awardToast(a, sp.pts, freezeMsg);
+    awardToast(a, sp.pts, extraMsg);
   };
 
   A.uncompletePlan = function (id, date) {
@@ -250,6 +287,16 @@
   };
 
   /* ---- 설정 ---- */
+  /* 하루 시작 시각 (0~6시). 자정 직후 완료가 '어제'로 기록되게 하는 유예 시간 */
+  A.setDayStart = function (h) {
+    var v = Math.max(0, Math.min(6, Number(h) || 0));
+    PR.store.state.dayStart = v;
+    commit();
+    PR.toast(v === 0
+      ? '하루 경계를 자정으로 맞췄어요'
+      : '새벽 ' + v + '시까지는 어제로 기록돼요 🌙');
+  };
+
   A.setPenalty = function (on) {
     PR.store.state.penaltyOn = !!on;
     commit();

@@ -65,8 +65,31 @@
       '<div class="sub" style="margin-top:3px">' + done + '/' + total + ' 단계 (' + pct + '%)</div>';
   }
 
-  /* 완료 입력 폼 (목표가 있는 계획용). idPrefix로 요소 구분 */
-  function completeForm(p, idPrefix) {
+  /* 완료 입력이 필요한 계획인지 (목표치 입력 / 정시 확인 / 완료일 선택) */
+  function needsForm(p, forceOnTime) {
+    if (p.targetT || p.targetQ || p.kind === 'deadline') return true;
+    if (!p.time) return false;
+    if (forceOnTime) return true;
+    var n = new Date();
+    return !PR.points.inWindow(p, n.getHours() * 60 + n.getMinutes());
+  }
+
+  /* 완료 폼에서 입력값 읽기 (요소가 없으면 그 항목은 생략) */
+  function readCompleteForm(idPrefix) {
+    var g = function (s) { return document.getElementById(idPrefix + '-' + s); };
+    var tEl = g('t'), qEl = g('q'), dEl = g('d'), tmEl = g('tm');
+    return {
+      t: tEl ? tEl.value : 0,
+      q: qEl ? qEl.value : 0,
+      date: dEl ? dEl.value : undefined,
+      ontime: tmEl ? tmEl.checked : undefined
+    };
+  }
+
+  /* 완료 입력 폼 (목표가 있는 계획용). idPrefix로 요소 구분.
+     opts.forceOnTime: 지금 시각과 무관하게 정시 체크박스를 띄운다 (지난 날 소급 완료용) */
+  function completeForm(p, idPrefix, opts) {
+    opts = opts || {};
     var h = '<div class="cform" id="' + idPrefix + '-form">';
     if (p.kind === 'deadline') {
       var today = PR.todayStr();
@@ -74,7 +97,7 @@
     }
     if (p.time) {
       var n = new Date();
-      var within = PR.points.inWindow(p, n.getHours() * 60 + n.getMinutes());
+      var within = !opts.forceOnTime && PR.points.inWindow(p, n.getHours() * 60 + n.getMinutes());
       if (!within) { // 지금이 시간대 안이면 물어볼 필요 없이 자동 인정 (체크박스 생략)
         h += '<label style="display:flex; align-items:center; gap:6px; cursor:pointer; flex-basis:100%; margin:0 0 2px">' +
           '<input type="checkbox" id="' + idPrefix + '-tm" style="width:auto">' +
@@ -92,5 +115,6 @@
   }
 
   PR.vh = { planChips: planChips, rangeFields: rangeFields, readRange: readRange,
-            progressBar: progressBar, completeForm: completeForm };
+            progressBar: progressBar, completeForm: completeForm,
+            needsForm: needsForm, readCompleteForm: readCompleteForm };
 })(window.PR = window.PR || {});

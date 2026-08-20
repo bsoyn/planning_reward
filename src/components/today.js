@@ -10,11 +10,9 @@
 
   function planRow(p) {
     var done = !!PR.sched.todayLog(p.id);
-    var n0 = new Date();
-    var outOfWindow = p.time && !PR.points.inWindow(p, n0.getHours() * 60 + n0.getMinutes());
     /* 폼이 필요한 경우: 실제 수행량 입력(목표), 완료일 입력(마감형),
        시간대 밖 완료(정시 여부 확인). 시간대 안이면 자동 인정이라 물어보지 않음 */
-    var needForm = p.targetT || p.targetQ || p.kind === 'deadline' || outOfWindow;
+    var needForm = PR.vh.needsForm(p);
     var quota = '';
     if (p.kind === 'routine' && p.freq && p.freq.type === 'weekly') {
       var k = PR.sched.weekFullCount(p.id);
@@ -48,8 +46,13 @@
     render: function () {
       var S = PR.store.state;
       var today = PR.todayStr();
-      var now = new Date();
+      var now = PR.todayDate();
       var out = '<h2>' + (now.getMonth() + 1) + '월 ' + now.getDate() + '일 (' + PR.DAYS[now.getDay()] + ') 오늘</h2>';
+      /* 새벽(하루 시작 시각 이전)에는 아직 어제로 기록된다는 걸 알려준다 */
+      if (PR.inGraceHours()) {
+        out += '<div class="sub" style="margin:-4px 0 8px">🌙 지금은 아직 <b>' + (now.getMonth() + 1) + '/' + now.getDate() +
+          '</b>로 기록돼요 (새벽 ' + PR.dayStart() + '시까지) — 자정 넘겨 끝내도 손해 없어요</div>';
+      }
 
       /* 1. 오늘의 습관 (단순 토글) */
       var habits = S.plans.filter(function (p) { return p.kind === 'habit' && PR.sched.isScheduledOn(p, today); });
@@ -135,13 +138,8 @@
         if (b.dataset.donex) { openId = null; PR.actions.completePlan(b.dataset.donex, {}); }
         if (b.dataset.confirm) {
           var id = b.dataset.confirm;
-          var tEl = document.getElementById('c' + id + '-t');
-          var qEl = document.getElementById('c' + id + '-q');
-          var dEl = document.getElementById('c' + id + '-d');
-          var tmEl = document.getElementById('c' + id + '-tm');
           openId = null;
-          PR.actions.completePlan(id, { t: tEl ? tEl.value : 0, q: qEl ? qEl.value : 0,
-            date: dEl ? dEl.value : undefined, ontime: tmEl ? tmEl.checked : undefined });
+          PR.actions.completePlan(id, PR.vh.readCompleteForm('c' + id));
         }
         if (b.dataset.undo && confirm('완료를 취소할까요? 받은 포인트가 회수됩니다.')) PR.actions.uncompletePlan(b.dataset.undo);
         if (b.id === 'ad-add') {

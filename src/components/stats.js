@@ -9,7 +9,7 @@
       /* 최근 7일 포인트 (마일스톤/완주 보너스/페널티 포함 = 순증감) */
       var days = [];
       for (var i = 6; i >= 0; i--) {
-        var d = new Date(); d.setDate(d.getDate() - i);
+        var d = PR.todayDate(); d.setDate(d.getDate() - i);
         days.push(PR.todayStr(d));
       }
       var daily = days.map(function (ds) {
@@ -30,7 +30,7 @@
       var sched = 0, done = 0;
       /* 요일 고정(습관/반복): 일 단위 */
       for (var j = 0; j < 30; j++) {
-        var d2 = new Date(); d2.setDate(d2.getDate() - j);
+        var d2 = PR.todayDate(); d2.setDate(d2.getDate() - j);
         var ds2 = PR.todayStr(d2);
         S.plans.forEach(function (p) {
           if ((p.kind !== 'habit' && p.kind !== 'routine') || (p.freq && p.freq.type === 'weekly')) return;
@@ -41,7 +41,7 @@
       }
       /* 주 n회(습관/반복): 주 단위 (최근 4주) */
       for (var w = 0; w < 4; w++) {
-        var wd = new Date(); wd.setDate(wd.getDate() - w * 7);
+        var wd = PR.todayDate(); wd.setDate(wd.getDate() - w * 7);
         var wk = PR.weekKey(PR.todayStr(wd));
         S.plans.forEach(function (p) {
           if ((p.kind !== 'habit' && p.kind !== 'routine') || !p.freq || p.freq.type !== 'weekly') return;
