@@ -8,8 +8,8 @@
    스트릭보너스 = min(연속일 × 2%, 50%)          — r ≥ 1일 때만
    정시보너스  = 기본P × 30% — 시간대(시작~끝) 안에 완료, 끝 미지정 시 시작 ±30분. r ≥ 1일 때만
    초과보너스  = 기본P × 50% × min(r-1, 1)       — 초과분 절반 요율, 상한 +50%
-   조기보너스  = 기본P × 30% × 남은기간비율        — 마감형, r ≥ 1, 마감 전
-   지각       = 마감 지나면 총액 × 50%
+   조기보너스  = 기본P × 30% × 남은기간비율        — 1회성, r ≥ 1, 목표일 전
+   늦음       = 목표일 지나면 총액 × 80% (-20%)   — '마감'이 아니라 '목표일'이라 가볍게
    서프라이즈  = 완전달성 시 낮은 확률로 추가 지급 (변동비율 강화, 액션에서만 굴림)
    번외 기록   = 가치의 80%, 보너스·스트릭 없음 (계획한 일이 항상 더 값지게)
    스트릭: 스케줄 인식(예정일만 의무) + 방어막 반영, 비의무·비번외 완전 달성만 인정 */
@@ -17,6 +17,12 @@
   'use strict';
 
   var FULL = 1 - 1e-9;
+
+  /* 목표일을 넘겨 끝냈을 때 남는 지급 비율. '마감'이 아니라 '목표일'이라는 이름에 맞춰
+     벌이 아니라 살짝 아쉬운 정도로 (-20%). UI 문구도 이 값에서 만들어 쓴다. */
+  var LATE_RATE = 0.8;
+  function latePct() { return Math.round((1 - LATE_RATE) * 100); }   // 20
+  function lateKeepPct() { return Math.round(LATE_RATE * 100); }     // 80
 
   /* 달성률. input = {t:실제 분, q:실제 분량} */
   function ratio(p, input) {
@@ -100,7 +106,7 @@
     return Math.abs(cur - from) <= 30;
   }
 
-  /* 마감형 조기/지각 판정. {earlyRatio: 0~1, late: bool} */
+  /* 1회성 목표일 기준 조기/늦음 판정. {earlyRatio: 0~1, late: bool} */
   function deadlineState(p, todayStr) {
     if (!p.deadline) return { earlyRatio: 0, late: false };
     var today = todayStr || PR.todayStr();
@@ -152,7 +158,7 @@
     }
 
     var total = main + otPts + over + early;
-    if (late) total = Math.round(total * 0.5);
+    if (late) total = Math.round(total * LATE_RATE);
 
     return { total: total, main: main, otPts: otPts, over: over, early: early,
              late: late, onTime: onTime, r: r, full: full, streak: s, sb: sb,
@@ -168,12 +174,12 @@
     return { hit: true, pts: pts };
   }
 
-  /* 완주 보너스 (프로젝트). 마감 있으면 조기 가산/지각 감액 동일 규칙 */
+  /* 완주 보너스 (프로젝트). 목표일 있으면 조기 가산/늦음 감액 동일 규칙 */
   function projectBonus(pj) {
     var bonus = pj.bonusPts || 0;
     if (!pj.deadline) return { total: bonus, early: 0, late: false };
     var ds = deadlineState(pj);
-    if (ds.late) return { total: Math.round(bonus * 0.5), early: 0, late: true };
+    if (ds.late) return { total: Math.round(bonus * LATE_RATE), early: 0, late: true };
     var early = Math.round(bonus * 0.3 * ds.earlyRatio);
     return { total: bonus + early, early: early, late: false };
   }
@@ -188,6 +194,9 @@
     deadlineState: deadlineState,
     calcAward: calcAward,
     rollSurprise: rollSurprise,
-    projectBonus: projectBonus
+    projectBonus: projectBonus,
+    LATE_RATE: LATE_RATE,
+    latePct: latePct,
+    lateKeepPct: lateKeepPct
   };
 })(window.PR = window.PR || {});

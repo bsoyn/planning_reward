@@ -28,7 +28,7 @@
     }
     if (p.kind === 'deadline' && p.deadline) {
       var left = PR.daysBetween(PR.todayStr(), p.deadline);
-      var lbl = left < 0 ? '마감 지남' : left === 0 ? 'D-day' : 'D-' + left;
+      var lbl = left < 0 ? '목표일 지남' : left === 0 ? 'D-day' : 'D-' + left;
       c += '<span class="chip ' + (left <= 3 ? 'd3' : 'time') + '">📅 ' + lbl + '</span>';
     }
     return c;
@@ -108,7 +108,7 @@
     if (p.targetQ) h += '<div class="grow"><label>실제 분량 (' + PR.esc(p.unitQ || '개') + ')</label><input type="number" min="0" id="' + idPrefix + '-q" value="' + p.targetQ + '"></div>';
     h += '<button data-confirm="' + p.id + '" style="align-self:flex-end">지급</button>';
     if (p.kind === 'deadline') {
-      h += '<div class="sub" style="flex-basis:100%">뒤늦게 기록하는 경우 실제 완료일을 고르세요 — 마감 내였다면 지각 감액이 없어요 (소급 기록은 보너스 제외)</div>';
+      h += '<div class="sub" style="flex-basis:100%">뒤늦게 기록하는 경우 실제 완료일을 고르세요 — 목표일 안이었다면 감액이 없어요 (소급 기록은 보너스 제외)</div>';
     }
     h += '</div>';
     return h;

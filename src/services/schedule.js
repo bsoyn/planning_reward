@@ -42,7 +42,7 @@
     }).length;
   }
 
-  /* 미완료 마감형 계획 (마감 임박순) */
+  /* 미완료 1회성 계획 (목표일 임박순) */
   function pendingDeadlines() {
     return PR.store.state.plans
       .filter(function (p) { return p.kind === 'deadline' && p.active && !p.done; })

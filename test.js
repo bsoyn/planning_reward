@@ -1,5 +1,5 @@
 /* 회귀 테스트 — DOM 없이 순수 로직만 로드해서 검증. node test.js
-   [1~4] 반복 기간(v5)  [5~6] 보상 1회성/다회성 + 사용권 티켓(v6) */
+   [1~4] 반복 기간(v5)  [5~6] 보상·사용권(v6)  [7~9] 하루 경계·소급 완료  [10~11] 목표일 감액·0P */
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -18,7 +18,7 @@ const ctx = {
 ctx.window = ctx;
 vm.createContext(ctx);
 
-['core/utils.js', 'core/store.js', 'services/points.js', 'services/schedule.js', 'services/actions.js'].forEach(f => {
+['core/utils.js', 'core/store.js', 'services/points.js', 'services/schedule.js', 'services/actions.js', 'services/reconcile.js'].forEach(f => {
   vm.runInContext(fs.readFileSync(path.join(__dirname, 'src', f), 'utf8'), ctx, { filename: f });
 });
 const PR = ctx.PR;
@@ -235,6 +235,53 @@ PR.actions.completePlan('pd', { date: missedDay });
 ok('같은 날 중복 완료 차단', PR.store.state.points === before9);
 const future = PR.points.calcAward({ kind: 'routine', basePts: 30, duty: false }, { date: '2099-01-01' });
 ok('미래 날짜는 오늘로 고정', future.doneDate === PR.todayStr());
+
+console.log('\n[10] 목표일 늦음 감액 (-20%)');
+const soon = (n) => { const d = new RealDate(); d.setDate(d.getDate() + n); return PR.todayStr(d); };
+PR.store.state = PR.store.normalize({
+  v: 6, points: 0, earned: 0, bestStreak: 0, freezes: 0, freezeMark: 0, frozenDates: [], lastReconcile: today,
+  penaltyOn: true, dayStart: 4, plans: [], logs: [], projects: [], rewards: [], purchases: []
+});
+ok('LATE_RATE 0.8', PR.points.LATE_RATE === 0.8);
+ok('latePct 20', PR.points.latePct() === 20);
+ok('lateKeepPct 80', PR.points.lateKeepPct() === 80);
+
+const overdue = { id: 'd1', kind: 'deadline', basePts: 100, duty: false, deadline: daysAgo(2), createdAt: daysAgo(5) };
+const aLate = PR.points.calcAward(overdue, {});
+ok('목표일 지나면 총액의 80%만', aLate.late === true && aLate.total === Math.round(aLate.main * 0.8));
+/* duty=true면 스트릭 보너스가 안 붙어 절대값으로 확인 가능 (100P → 80P) */
+ok('보너스 없을 때 100P → 80P',
+  PR.points.calcAward(Object.assign({}, overdue, { duty: true }), {}).total === 80);
+
+const onTimeDl = { id: 'd2', kind: 'deadline', basePts: 100, duty: false, deadline: soon(3), createdAt: today };
+const aOk = PR.points.calcAward(onTimeDl, {});
+ok('목표일 전이면 감액 없음', aOk.late === false && aOk.total >= 100);
+
+ok('프로젝트 완주도 80%', PR.points.projectBonus({ bonusPts: 100, deadline: daysAgo(1) }).total === 80);
+
+console.log('\n[11] 기본 포인트 0');
+PR.store.state = PR.store.normalize({
+  v: 6, points: 50, earned: 50, bestStreak: 0, freezes: 0, freezeMark: 0, frozenDates: [],
+  lastReconcile: daysAgo(3), penaltyOn: true, dayStart: 4,
+  plans: [{ id: 'z1', title: '무포인트 습관', kind: 'habit', duty: false, basePts: 0, active: true,
+            freq: { type: 'days', days: [] }, startDate: daysAgo(10), endDate: '' }],
+  logs: [], projects: [], rewards: [], purchases: []
+});
+const a0 = PR.points.calcAward(PR.store.state.plans[0], {});
+ok('0P 계획은 0P 지급', a0.total === 0);
+ok('0P여도 완전 달성으로 인정', a0.full === true);
+ok('0P는 서프라이즈 없음', PR.points.rollSurprise(0).hit === false);
+
+PR.actions.completePlan('z1', {});
+ok('0P 완료가 기록으로 남음', PR.store.state.logs.some(l => l.planId === 'z1'));
+ok('포인트 변동 없음', PR.store.state.points === 50);
+ok('0P 완료도 스트릭에 반영', PR.points.computeStreak(false) === 1);
+
+/* 0P 계획만 놓친 날은 차감되지 않아야 한다 (예전엔 Math.max(1,…)로 1P가 깎였음) */
+const ptsBefore11 = PR.store.state.points;
+PR.reconcile.run();
+ok('0P 계획을 놓쳐도 차감 없음', PR.store.state.points === ptsBefore11);
+ok('차감 로그도 안 생김', !PR.store.state.logs.some(l => l.penalty));
 
 console.log('\n' + (fail ? '실패 ' + fail + '건 / ' : '') + '통과 ' + pass + '건');
 process.exit(fail ? 1 : 0);

@@ -9,14 +9,16 @@
 
   function awardToast(a, surprisePts, extra) {
     var total = a.total + (surprisePts || 0);
-    var msg = (a.full ? '✅' : '🔸') + ' +' + total + 'P' + (a.full ? ' 획득!' : ' (부분 달성 ' + Math.round(Math.min(a.r, 1) * 100) + '%)');
+    var msg = total > 0
+      ? (a.full ? '✅' : '🔸') + ' +' + total + 'P' + (a.full ? ' 획득!' : ' (부분 달성 ' + Math.round(Math.min(a.r, 1) * 100) + '%)')
+      : (a.full ? '✅ 완료!' : '🔸 부분 달성 ' + Math.round(Math.min(a.r, 1) * 100) + '%');
     var parts = [];
     if (a.full && a.sb > 0) parts.push('스트릭 ' + a.streak + '일 +' + Math.round(a.sb * 100) + '%');
     if (a.onTime) parts.push('⏰ 정시 +' + a.otPts + 'P');
     if (a.over > 0) parts.push('💪 초과 +' + a.over + 'P');
     if (a.early > 0) parts.push('🚀 조기 +' + a.early + 'P');
     if (surprisePts) parts.push('🎉 서프라이즈 +' + surprisePts + 'P!');
-    if (a.late) parts.push('⏳ 마감 지남 -50%');
+    if (a.late) parts.push('⏳ 목표일 지남 -' + PR.points.latePct() + '%');
     if (a.retro) parts.push('🕓 ' + a.doneDate + ' 완료로 기록 · 보너스 제외');
     if (parts.length) msg += '<br><span style="opacity:.75">' + parts.join(' · ') + '</span>';
     if (extra) msg += extra;
@@ -103,7 +105,7 @@
     var l = date
       ? S.logs.find(function (x) { return x.planId === id && x.date === date; })
       : PR.sched.todayLog(id);
-    if (!l) { // 소급 기록된 마감형: 마지막 로그로 취소
+    if (!l) { // 소급 기록된 1회성: 마지막 로그로 취소
       var p0 = S.plans.find(function (x) { return x.id === id; });
       if (p0 && p0.kind === 'deadline' && p0.done) {
         var ls = S.logs.filter(function (x) { return x.planId === id; });
@@ -178,7 +180,7 @@
       S.earned += b.total;
       msg = '🏆 프로젝트 완주! 보너스 +' + b.total + 'P' +
         (b.early ? '<br><span style="opacity:.75">🚀 조기 완주 +' + b.early + 'P 포함</span>' : '') +
-        (b.late ? '<br><span style="opacity:.75">⏳ 마감 지남 -50%</span>' : '');
+        (b.late ? '<br><span style="opacity:.75">⏳ 목표일 지남 -' + PR.points.latePct() + '%</span>' : '');
     }
     commit();
     PR.toast(msg);

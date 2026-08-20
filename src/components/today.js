@@ -1,4 +1,4 @@
-/* 오늘 탭: 습관 + 1회성(마감) + 반복적인 일 + 프로젝트 다음 단계 */
+/* 오늘 탭: 습관 + 1회성(목표일) + 반복적인 일 + 프로젝트 다음 단계 */
 (function (PR) {
   'use strict';
 
@@ -10,7 +10,7 @@
 
   function planRow(p) {
     var done = !!PR.sched.todayLog(p.id);
-    /* 폼이 필요한 경우: 실제 수행량 입력(목표), 완료일 입력(마감형),
+    /* 폼이 필요한 경우: 실제 수행량 입력(목표), 완료일 입력(1회성),
        시간대 밖 완료(정시 여부 확인). 시간대 안이면 자동 인정이라 물어보지 않음 */
     var needForm = PR.vh.needsForm(p);
     var quota = '';
@@ -21,16 +21,23 @@
     var hint = '';
     if (!done && p.kind === 'deadline') {
       var ds = PR.points.deadlineState(p);
-      hint = '<div class="sub" style="margin-top:2px">' + (ds.late
-        ? '<span style="color:var(--red)">마감 지남 · 지급 50%</span>'
-        : '지금 끝내면 조기 보너스 +' + Math.round(p.basePts * 0.3 * ds.earlyRatio) + 'P') + '</div>';
+      var earlyPts = Math.round(p.basePts * 0.3 * ds.earlyRatio);
+      /* 0P 계획이면 보너스 안내가 '+0P'로 나오므로 아예 생략 */
+      if (ds.late) {
+        hint = '<div class="sub" style="margin-top:2px"><span style="color:var(--red)">목표일 지남' +
+          (p.basePts ? ' · 지급 ' + PR.points.lateKeepPct() + '%' : '') + '</span></div>';
+      } else if (earlyPts > 0) {
+        hint = '<div class="sub" style="margin-top:2px">지금 끝내면 조기 보너스 +' + earlyPts + 'P</div>';
+      }
     }
     var h = '<div class="plan ' + (done ? 'done' : '') + '">' +
       '<div class="grow">' +
         '<div class="t">' + PR.esc(p.title) + '</div>' +
         '<div style="margin-top:4px">' + PR.vh.planChips(p) + quota + '</div>' +
-        (done ? '' : '<div class="sub" style="margin-top:4px">완전 달성 시 <span class="pts">+' + expectFull(p) + 'P</span>' +
-          (p.time ? ' · ⏰정시 +' + Math.round(p.basePts * 0.3) + 'P' : '') + '</div>') + hint +
+        (done ? '' : '<div class="sub" style="margin-top:4px">' + (p.basePts
+          ? '완전 달성 시 <span class="pts">+' + expectFull(p) + 'P</span>' +
+            (p.time ? ' · ⏰정시 +' + Math.round(p.basePts * 0.3) + 'P' : '')
+          : '포인트 없이 기록만') + '</div>') + hint +
       '</div>' +
       (done
         ? '<button class="gray small" data-undo="' + p.id + '">취소</button>'
@@ -64,16 +71,16 @@
             var st = PR.sched.planStreak(p);
             return '<div class="plan ' + (done ? 'done' : '') + '">' +
               '<div class="grow"><div class="t">' + PR.esc(p.title) + '</div>' +
-              '<div class="sub">🔥' + st.n + st.unit + ' · +' + p.basePts + 'P</div></div>' +
+              '<div class="sub">🔥' + st.n + st.unit + ' · ' + (p.basePts ? '+' + p.basePts + 'P' : '기록만') + '</div></div>' +
               '<button class="' + (done ? 'gray ' : '') + 'small" data-hb="' + p.id + '">' + (done ? '✓ 완료' : '체크') + '</button>' +
             '</div>';
           }).join('') + '</div>';
       }
 
-      /* 2. 1회성 (마감) — 반복보다 우선 노출 */
+      /* 2. 1회성 (목표일) — 반복보다 우선 노출 */
       var dls = PR.sched.pendingDeadlines();
       if (dls.length) {
-        out += '<div class="card"><div class="sub" style="margin-bottom:4px">📅 1회성 (마감)</div>' +
+        out += '<div class="card"><div class="sub" style="margin-bottom:4px">📅 1회성 목표</div>' +
           dls.map(planRow).join('') + '</div>';
       }
 

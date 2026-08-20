@@ -73,6 +73,9 @@ nav button.on{color:var(--ink)}
 .hist{font-size:13px; padding:9px 0; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px}
 .hist:last-child{border:none}
 details summary{cursor:pointer; font-weight:600; font-size:14px; padding:5px 0}
+/* 계획 폼의 접히는 세부 설정 — 기본은 닫아두고 필수 항목만 보이게 */
+details.adv{border-top:1px solid var(--line); margin-top:14px; padding-top:2px}
+details.adv>summary{color:var(--sub); font-weight:600; font-size:13.5px}
 .hidden{display:none}
 
 /* 프로젝트 진행률 바, 완료 입력 폼 */
@@ -390,8 +393,8 @@ button.hcell.today.done{background:var(--accent)}
    스트릭보너스 = min(연속일 × 2%, 50%)          — r ≥ 1일 때만
    정시보너스  = 기본P × 30% — 시간대(시작~끝) 안에 완료, 끝 미지정 시 시작 ±30분. r ≥ 1일 때만
    초과보너스  = 기본P × 50% × min(r-1, 1)       — 초과분 절반 요율, 상한 +50%
-   조기보너스  = 기본P × 30% × 남은기간비율        — 마감형, r ≥ 1, 마감 전
-   지각       = 마감 지나면 총액 × 50%
+   조기보너스  = 기본P × 30% × 남은기간비율        — 1회성, r ≥ 1, 목표일 전
+   늦음       = 목표일 지나면 총액 × 80% (-20%)   — '마감'이 아니라 '목표일'이라 가볍게
    서프라이즈  = 완전달성 시 낮은 확률로 추가 지급 (변동비율 강화, 액션에서만 굴림)
    번외 기록   = 가치의 80%, 보너스·스트릭 없음 (계획한 일이 항상 더 값지게)
    스트릭: 스케줄 인식(예정일만 의무) + 방어막 반영, 비의무·비번외 완전 달성만 인정 */
@@ -399,6 +402,12 @@ button.hcell.today.done{background:var(--accent)}
   'use strict';
 
   var FULL = 1 - 1e-9;
+
+  /* 목표일을 넘겨 끝냈을 때 남는 지급 비율. '마감'이 아니라 '목표일'이라는 이름에 맞춰
+     벌이 아니라 살짝 아쉬운 정도로 (-20%). UI 문구도 이 값에서 만들어 쓴다. */
+  var LATE_RATE = 0.8;
+  function latePct() { return Math.round((1 - LATE_RATE) * 100); }   // 20
+  function lateKeepPct() { return Math.round(LATE_RATE * 100); }     // 80
 
   /* 달성률. input = {t:실제 분, q:실제 분량} */
   function ratio(p, input) {
@@ -482,7 +491,7 @@ button.hcell.today.done{background:var(--accent)}
     return Math.abs(cur - from) <= 30;
   }
 
-  /* 마감형 조기/지각 판정. {earlyRatio: 0~1, late: bool} */
+  /* 1회성 목표일 기준 조기/늦음 판정. {earlyRatio: 0~1, late: bool} */
   function deadlineState(p, todayStr) {
     if (!p.deadline) return { earlyRatio: 0, late: false };
     var today = todayStr || PR.todayStr();
@@ -534,7 +543,7 @@ button.hcell.today.done{background:var(--accent)}
     }
 
     var total = main + otPts + over + early;
-    if (late) total = Math.round(total * 0.5);
+    if (late) total = Math.round(total * LATE_RATE);
 
     return { total: total, main: main, otPts: otPts, over: over, early: early,
              late: late, onTime: onTime, r: r, full: full, streak: s, sb: sb,
@@ -550,12 +559,12 @@ button.hcell.today.done{background:var(--accent)}
     return { hit: true, pts: pts };
   }
 
-  /* 완주 보너스 (프로젝트). 마감 있으면 조기 가산/지각 감액 동일 규칙 */
+  /* 완주 보너스 (프로젝트). 목표일 있으면 조기 가산/늦음 감액 동일 규칙 */
   function projectBonus(pj) {
     var bonus = pj.bonusPts || 0;
     if (!pj.deadline) return { total: bonus, early: 0, late: false };
     var ds = deadlineState(pj);
-    if (ds.late) return { total: Math.round(bonus * 0.5), early: 0, late: true };
+    if (ds.late) return { total: Math.round(bonus * LATE_RATE), early: 0, late: true };
     var early = Math.round(bonus * 0.3 * ds.earlyRatio);
     return { total: bonus + early, early: early, late: false };
   }
@@ -570,7 +579,10 @@ button.hcell.today.done{background:var(--accent)}
     deadlineState: deadlineState,
     calcAward: calcAward,
     rollSurprise: rollSurprise,
-    projectBonus: projectBonus
+    projectBonus: projectBonus,
+    LATE_RATE: LATE_RATE,
+    latePct: latePct,
+    lateKeepPct: lateKeepPct
   };
 })(window.PR = window.PR || {});
 
@@ -619,7 +631,7 @@ button.hcell.today.done{background:var(--accent)}
     }).length;
   }
 
-  /* 미완료 마감형 계획 (마감 임박순) */
+  /* 미완료 1회성 계획 (목표일 임박순) */
   function pendingDeadlines() {
     return PR.store.state.plans
       .filter(function (p) { return p.kind === 'deadline' && p.active && !p.done; })
@@ -684,14 +696,16 @@ button.hcell.today.done{background:var(--accent)}
 
   function awardToast(a, surprisePts, extra) {
     var total = a.total + (surprisePts || 0);
-    var msg = (a.full ? '✅' : '🔸') + ' +' + total + 'P' + (a.full ? ' 획득!' : ' (부분 달성 ' + Math.round(Math.min(a.r, 1) * 100) + '%)');
+    var msg = total > 0
+      ? (a.full ? '✅' : '🔸') + ' +' + total + 'P' + (a.full ? ' 획득!' : ' (부분 달성 ' + Math.round(Math.min(a.r, 1) * 100) + '%)')
+      : (a.full ? '✅ 완료!' : '🔸 부분 달성 ' + Math.round(Math.min(a.r, 1) * 100) + '%');
     var parts = [];
     if (a.full && a.sb > 0) parts.push('스트릭 ' + a.streak + '일 +' + Math.round(a.sb * 100) + '%');
     if (a.onTime) parts.push('⏰ 정시 +' + a.otPts + 'P');
     if (a.over > 0) parts.push('💪 초과 +' + a.over + 'P');
     if (a.early > 0) parts.push('🚀 조기 +' + a.early + 'P');
     if (surprisePts) parts.push('🎉 서프라이즈 +' + surprisePts + 'P!');
-    if (a.late) parts.push('⏳ 마감 지남 -50%');
+    if (a.late) parts.push('⏳ 목표일 지남 -' + PR.points.latePct() + '%');
     if (a.retro) parts.push('🕓 ' + a.doneDate + ' 완료로 기록 · 보너스 제외');
     if (parts.length) msg += '<br><span style="opacity:.75">' + parts.join(' · ') + '</span>';
     if (extra) msg += extra;
@@ -778,7 +792,7 @@ button.hcell.today.done{background:var(--accent)}
     var l = date
       ? S.logs.find(function (x) { return x.planId === id && x.date === date; })
       : PR.sched.todayLog(id);
-    if (!l) { // 소급 기록된 마감형: 마지막 로그로 취소
+    if (!l) { // 소급 기록된 1회성: 마지막 로그로 취소
       var p0 = S.plans.find(function (x) { return x.id === id; });
       if (p0 && p0.kind === 'deadline' && p0.done) {
         var ls = S.logs.filter(function (x) { return x.planId === id; });
@@ -853,7 +867,7 @@ button.hcell.today.done{background:var(--accent)}
       S.earned += b.total;
       msg = '🏆 프로젝트 완주! 보너스 +' + b.total + 'P' +
         (b.early ? '<br><span style="opacity:.75">🚀 조기 완주 +' + b.early + 'P 포함</span>' : '') +
-        (b.late ? '<br><span style="opacity:.75">⏳ 마감 지남 -50%</span>' : '');
+        (b.late ? '<br><span style="opacity:.75">⏳ 목표일 지남 -' + PR.points.latePct() + '%</span>' : '');
     }
     commit();
     PR.toast(msg);
@@ -1029,7 +1043,7 @@ button.hcell.today.done{background:var(--accent)}
             (!p.freq || p.freq.type !== 'weekly') && PR.sched.isScheduledOn(p, ds);
         });
         var avg = due.reduce(function (a, p) { return a + (p.basePts || 0); }, 0) / (due.length || 1);
-        missed.push({ ds: ds, pen: Math.max(1, Math.round(avg * PENALTY_RATE)) });
+        missed.push({ ds: ds, pen: Math.max(0, Math.round(avg * PENALTY_RATE)) });
       }
       d.setDate(d.getDate() + 1);
     }
@@ -1043,7 +1057,7 @@ button.hcell.today.done{background:var(--accent)}
         S.freezes--;
         S.frozenDates.push(m.ds);
         saved++;
-      } else if (S.penaltyOn) {            // 소액 차감 (상한까지만)
+      } else if (S.penaltyOn && m.pen > 0) { // 소액 차감 (상한까지만, 0P 계획은 제외)
         var room = PENALTY_CAP - penalty;
         if (room <= 0) return;
         var pen = Math.min(m.pen, room);
@@ -1281,7 +1295,7 @@ button.hcell.today.done{background:var(--accent)}
     }
     if (p.kind === 'deadline' && p.deadline) {
       var left = PR.daysBetween(PR.todayStr(), p.deadline);
-      var lbl = left < 0 ? '마감 지남' : left === 0 ? 'D-day' : 'D-' + left;
+      var lbl = left < 0 ? '목표일 지남' : left === 0 ? 'D-day' : 'D-' + left;
       c += '<span class="chip ' + (left <= 3 ? 'd3' : 'time') + '">📅 ' + lbl + '</span>';
     }
     return c;
@@ -1361,7 +1375,7 @@ button.hcell.today.done{background:var(--accent)}
     if (p.targetQ) h += '<div class="grow"><label>실제 분량 (' + PR.esc(p.unitQ || '개') + ')</label><input type="number" min="0" id="' + idPrefix + '-q" value="' + p.targetQ + '"></div>';
     h += '<button data-confirm="' + p.id + '" style="align-self:flex-end">지급</button>';
     if (p.kind === 'deadline') {
-      h += '<div class="sub" style="flex-basis:100%">뒤늦게 기록하는 경우 실제 완료일을 고르세요 — 마감 내였다면 지각 감액이 없어요 (소급 기록은 보너스 제외)</div>';
+      h += '<div class="sub" style="flex-basis:100%">뒤늦게 기록하는 경우 실제 완료일을 고르세요 — 목표일 안이었다면 감액이 없어요 (소급 기록은 보너스 제외)</div>';
     }
     h += '</div>';
     return h;
@@ -1457,7 +1471,7 @@ button.hcell.today.done{background:var(--accent)}
       }).join('');
       return '<div class="hgrid"><div style="min-width:0">' +
         '<div class="t" style="font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">' + PR.esc(p.title) + '</div>' +
-        '<div class="sub">🔥' + st.n + st.unit + ' · +' + p.basePts + 'P' + quota + '</div>' +
+        '<div class="sub">🔥' + st.n + st.unit + ' · ' + (p.basePts ? '+' + p.basePts + 'P' : '기록만') + quota + '</div>' +
       '</div>' + cells + '</div>';
     }).join('');
 
@@ -1471,29 +1485,30 @@ button.hcell.today.done{background:var(--accent)}
     var dayBtns = PR.DAYS.map(function (d, i) {
       return '<button type="button" class="' + ((f.days || []).indexOf(i) !== -1 ? 'on' : '') + '" data-day="' + i + '">' + d + '</button>';
     }).join('');
+    var advOpen = !!(p.endDate || (p.startDate && p.startDate !== PR.todayStr()));
     return '<div class="card">' +
       '<div style="font-weight:700; margin-bottom:2px">' + (editing ? '✏️ 습관 수정' : '➕ 새 습관') + '</div>' +
-      '<div class="row">' +
-        '<div class="grow" style="flex:2"><label>습관 이름</label>' +
-          '<input id="h-title" placeholder="예: 물 2L, 스트레칭" value="' + PR.esc(p.title) + '"></div>' +
-        '<div class="grow"><label>포인트</label>' +
-          '<input id="h-base" type="number" min="1" value="' + (p.basePts || '') + '"></div>' +
-      '</div>' +
-      '<div class="sub" style="margin-top:4px">습관은 가볍게 5~20P 권장</div>' +
-      '<label>반복 방식</label>' +
+      '<label>습관 이름</label>' +
+      '<input id="h-title" placeholder="예: 물 2L, 스트레칭" value="' + PR.esc(p.title) + '">' +
+      '<label>언제</label>' +
       '<div class="row">' +
         '<button type="button" class="grow ' + (f.type !== 'weekly' ? '' : 'gray') + '" id="h-ftype-days">요일 고정</button>' +
         '<button type="button" class="grow ' + (f.type === 'weekly' ? '' : 'gray') + '" id="h-ftype-weekly">주 n회</button>' +
       '</div>' +
       '<div id="h-days-wrap" class="' + (f.type === 'weekly' ? 'hidden' : '') + '">' +
-        '<label>요일 (선택 안 하면 매일)</label>' +
-        '<div class="daybtns" id="h-days">' + dayBtns + '</div>' +
+        '<div class="daybtns" id="h-days" style="margin-top:8px">' + dayBtns + '</div>' +
+        '<div class="sub" style="margin-top:2px">선택 안 하면 매일</div>' +
       '</div>' +
       '<div id="h-weekly-wrap" class="' + (f.type === 'weekly' ? '' : 'hidden') + '">' +
         '<label>주당 횟수</label>' +
         '<input id="h-wn" type="number" min="1" max="7" value="' + (f.n || 3) + '">' +
       '</div>' +
-      PR.vh.rangeFields(p, 'h') +
+      '<label>포인트</label>' +
+      '<input id="h-base" type="number" min="0" value="' + (p.basePts != null && p.basePts !== '' ? p.basePts : '') + '" placeholder="0">' +
+      '<div class="sub" style="margin-top:2px">습관은 가볍게 5~20P 권장 · 비우거나 0이면 기록만 해요</div>' +
+      '<details class="adv"' + (advOpen ? ' open' : '') + '>' +
+        '<summary>⚙️ 세부 설정 — 반복 기간</summary>' + PR.vh.rangeFields(p, 'h') +
+      '</details>' +
       '<div class="row" style="margin-top:12px">' +
         '<button id="h-save" class="grow">' + (editing ? '수정 저장' : '습관 추가') + '</button>' +
         (editing ? '<button id="h-cancel" class="gray">취소</button>' : '') +
@@ -1512,7 +1527,7 @@ button.hcell.today.done{background:var(--accent)}
         var period = PR.sched.isExpired(p) ? ' · <span style="color:var(--sub)">기간 종료(' + p.endDate + ')</span>'
           : (p.endDate ? ' · ~' + p.endDate : '');
         return '<div class="plan"><div class="grow"><div class="t">' + PR.esc(p.title) + '</div>' +
-          '<div class="sub">' + dd + ' · +' + p.basePts + 'P' + period + '</div></div>' +
+          '<div class="sub">' + dd + ' · ' + (p.basePts ? '+' + p.basePts + 'P' : '기록만') + period + '</div></div>' +
           '<button class="ghost small" data-hedit="' + p.id + '">수정</button>' +
           '<button class="danger small" data-hdel="' + p.id + '">삭제</button></div>';
       }).join('') + '</details></div>';
@@ -1520,9 +1535,9 @@ button.hcell.today.done{background:var(--accent)}
 
   function submit() {
     var title = document.getElementById('h-title').value.trim();
-    var base = Number(document.getElementById('h-base').value);
+    /* 포인트는 0도 허용 — 빈칸은 0으로 본다 (포인트 없이 기록만) */
+    var base = Math.max(0, Number(document.getElementById('h-base').value) || 0);
     if (!title) { PR.toast('습관 이름을 입력해 주세요'); return; }
-    if (!base || base < 1) { PR.toast('포인트를 입력해 주세요'); return; }
     var range = PR.vh.readRange('h');
     if (!range) return;
     var weekly = !document.getElementById('h-weekly-wrap').classList.contains('hidden');
@@ -1582,7 +1597,7 @@ button.hcell.today.done{background:var(--accent)}
 })(window.PR = window.PR || {});
 
 /* ===== components/today.js ===== */
-/* 오늘 탭: 습관 + 1회성(마감) + 반복적인 일 + 프로젝트 다음 단계 */
+/* 오늘 탭: 습관 + 1회성(목표일) + 반복적인 일 + 프로젝트 다음 단계 */
 (function (PR) {
   'use strict';
 
@@ -1594,7 +1609,7 @@ button.hcell.today.done{background:var(--accent)}
 
   function planRow(p) {
     var done = !!PR.sched.todayLog(p.id);
-    /* 폼이 필요한 경우: 실제 수행량 입력(목표), 완료일 입력(마감형),
+    /* 폼이 필요한 경우: 실제 수행량 입력(목표), 완료일 입력(1회성),
        시간대 밖 완료(정시 여부 확인). 시간대 안이면 자동 인정이라 물어보지 않음 */
     var needForm = PR.vh.needsForm(p);
     var quota = '';
@@ -1605,16 +1620,23 @@ button.hcell.today.done{background:var(--accent)}
     var hint = '';
     if (!done && p.kind === 'deadline') {
       var ds = PR.points.deadlineState(p);
-      hint = '<div class="sub" style="margin-top:2px">' + (ds.late
-        ? '<span style="color:var(--red)">마감 지남 · 지급 50%</span>'
-        : '지금 끝내면 조기 보너스 +' + Math.round(p.basePts * 0.3 * ds.earlyRatio) + 'P') + '</div>';
+      var earlyPts = Math.round(p.basePts * 0.3 * ds.earlyRatio);
+      /* 0P 계획이면 보너스 안내가 '+0P'로 나오므로 아예 생략 */
+      if (ds.late) {
+        hint = '<div class="sub" style="margin-top:2px"><span style="color:var(--red)">목표일 지남' +
+          (p.basePts ? ' · 지급 ' + PR.points.lateKeepPct() + '%' : '') + '</span></div>';
+      } else if (earlyPts > 0) {
+        hint = '<div class="sub" style="margin-top:2px">지금 끝내면 조기 보너스 +' + earlyPts + 'P</div>';
+      }
     }
     var h = '<div class="plan ' + (done ? 'done' : '') + '">' +
       '<div class="grow">' +
         '<div class="t">' + PR.esc(p.title) + '</div>' +
         '<div style="margin-top:4px">' + PR.vh.planChips(p) + quota + '</div>' +
-        (done ? '' : '<div class="sub" style="margin-top:4px">완전 달성 시 <span class="pts">+' + expectFull(p) + 'P</span>' +
-          (p.time ? ' · ⏰정시 +' + Math.round(p.basePts * 0.3) + 'P' : '') + '</div>') + hint +
+        (done ? '' : '<div class="sub" style="margin-top:4px">' + (p.basePts
+          ? '완전 달성 시 <span class="pts">+' + expectFull(p) + 'P</span>' +
+            (p.time ? ' · ⏰정시 +' + Math.round(p.basePts * 0.3) + 'P' : '')
+          : '포인트 없이 기록만') + '</div>') + hint +
       '</div>' +
       (done
         ? '<button class="gray small" data-undo="' + p.id + '">취소</button>'
@@ -1648,16 +1670,16 @@ button.hcell.today.done{background:var(--accent)}
             var st = PR.sched.planStreak(p);
             return '<div class="plan ' + (done ? 'done' : '') + '">' +
               '<div class="grow"><div class="t">' + PR.esc(p.title) + '</div>' +
-              '<div class="sub">🔥' + st.n + st.unit + ' · +' + p.basePts + 'P</div></div>' +
+              '<div class="sub">🔥' + st.n + st.unit + ' · ' + (p.basePts ? '+' + p.basePts + 'P' : '기록만') + '</div></div>' +
               '<button class="' + (done ? 'gray ' : '') + 'small" data-hb="' + p.id + '">' + (done ? '✓ 완료' : '체크') + '</button>' +
             '</div>';
           }).join('') + '</div>';
       }
 
-      /* 2. 1회성 (마감) — 반복보다 우선 노출 */
+      /* 2. 1회성 (목표일) — 반복보다 우선 노출 */
       var dls = PR.sched.pendingDeadlines();
       if (dls.length) {
-        out += '<div class="card"><div class="sub" style="margin-bottom:4px">📅 1회성 (마감)</div>' +
+        out += '<div class="card"><div class="sub" style="margin-bottom:4px">📅 1회성 목표</div>' +
           dls.map(planRow).join('') + '</div>';
       }
 
@@ -1745,7 +1767,11 @@ button.hcell.today.done{background:var(--accent)}
 })(window.PR = window.PR || {});
 
 /* ===== components/plans.js ===== */
-/* 계획 탭: [1회성 (마감) | 반복] 세그먼트 + 종류별 전용 폼. 프로젝트는 전용 탭으로 분리 */
+/* 계획 탭: [1회성 | 반복 | 습관 | 프로젝트] 세그먼트 + 종류별 전용 폼. 프로젝트는 전용 탭으로 분리.
+
+   폼 구성 원칙: 겉에는 꼭 필요한 것만 — 이름 · 언제(요일/목표일) · 포인트.
+   목표치·시간대·반복 기간·의무는 '세부 설정'(details)에 접어 둔다. 접혀 있어도
+   DOM에는 남아 있으므로 제출 로직(getElementById)은 그대로 동작한다. */
 (function (PR) {
   'use strict';
 
@@ -1786,16 +1812,33 @@ button.hcell.today.done{background:var(--accent)}
       '</div>';
   }
 
-  function commonHead(p, label, ph) {
-    return '<div class="row">' +
-      '<div class="grow" style="flex:2"><label>' + label + '</label>' +
-        '<input id="f-title" placeholder="' + ph + '" value="' + PR.esc(p.title) + '"></div>' +
-      '<div class="grow"><label>기본 포인트</label>' +
-        '<input id="f-base" type="number" min="1" value="' + (p.basePts || '') + '" placeholder="30"></div>' +
-    '</div>' +
-    '<label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:10px">' +
+  function titleField(p, label, ph) {
+    return '<label>' + label + '</label>' +
+      '<input id="f-title" placeholder="' + ph + '" value="' + PR.esc(p.title) + '">';
+  }
+
+  /* 포인트 — 0(또는 빈칸)이면 포인트 없이 기록만 하는 계획 */
+  function pointsField(p) {
+    return '<label>포인트</label>' +
+      '<input id="f-base" type="number" min="0" value="' + (p.basePts != null && p.basePts !== '' ? p.basePts : '') + '" placeholder="0">' +
+      '<div class="sub" style="margin-top:2px">비우거나 0이면 포인트 없이 기록만 해요 · 가볍게 10~20, 무난 30~50, 힘든 일 80~100</div>';
+  }
+
+  function dutyField(p) {
+    return '<label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:10px">' +
       '<input type="checkbox" id="f-duty" style="width:auto"' + (p.duty ? ' checked' : '') + '>' +
       '의무 (알바·출근·수업 — 스트릭 제외)</label>';
+  }
+
+  /* 기본값이 아닌 세부 항목이 있으면 '세부 설정'을 펼친 채로 연다 */
+  function hasAdvanced(p) {
+    return !!(p.targetT || p.targetQ || p.time || p.timeTo || p.duty || p.endDate ||
+      (p.startDate && p.startDate !== PR.todayStr()));
+  }
+
+  function advanced(p, inner) {
+    return '<details class="adv"' + (hasAdvanced(p) ? ' open' : '') + '>' +
+      '<summary>⚙️ 세부 설정 — 목표치 · 시간대 · 기간 · 의무</summary>' + inner + '</details>';
   }
 
   /* ---------------- 반복적인 일 폼 ---------------- */
@@ -1809,23 +1852,22 @@ button.hcell.today.done{background:var(--accent)}
     }).join('');
     return '<div class="card">' +
       '<div style="font-weight:700; margin-bottom:2px">' + (editing ? '✏️ 수정' : '➕ 새 반복적인 일') + '</div>' +
-      commonHead(p, '이름', '예: 독서, 영어 공부, 알바') +
-      targetFields(p) +
-      timeFields(p) +
-      '<label>반복 방식</label>' +
+      titleField(p, '이름', '예: 독서, 영어 공부, 알바') +
+      '<label>언제</label>' +
       '<div class="row">' +
         '<button type="button" class="grow ' + (f.type !== 'weekly' ? '' : 'gray') + '" id="f-ftype-days">요일 고정</button>' +
         '<button type="button" class="grow ' + (f.type === 'weekly' ? '' : 'gray') + '" id="f-ftype-weekly">주 n회</button>' +
       '</div>' +
       '<div id="f-days-wrap" class="' + (f.type === 'weekly' ? 'hidden' : '') + '">' +
-        '<label>요일 (선택 안 하면 매일)</label>' +
-        '<div class="daybtns" id="f-days">' + dayBtns + '</div>' +
+        '<div class="daybtns" id="f-days" style="margin-top:8px">' + dayBtns + '</div>' +
+        '<div class="sub" style="margin-top:2px">선택 안 하면 매일</div>' +
       '</div>' +
       '<div id="f-weekly-wrap" class="' + (f.type === 'weekly' ? '' : 'hidden') + '">' +
         '<label>주당 횟수</label>' +
         '<input id="f-wn" type="number" min="1" max="7" value="' + (f.n || 3) + '">' +
       '</div>' +
-      PR.vh.rangeFields(p, 'f') +
+      pointsField(p) +
+      advanced(p, targetFields(p) + timeFields(p) + PR.vh.rangeFields(p, 'f') + dutyField(p)) +
       '<div class="row" style="margin-top:12px">' +
         '<button id="f-save-routine" class="grow">' + (editing ? '수정 저장' : '추가') + '</button>' +
         (editing ? '<button id="f-cancel" class="gray">취소</button>' : '') +
@@ -1833,17 +1875,18 @@ button.hcell.today.done{background:var(--accent)}
     '</div>';
   }
 
-  /* ---------------- 1회성 (마감) 폼 ---------------- */
+  /* ---------------- 1회성 (목표일) 폼 ---------------- */
   function deadlineForm() {
     var p = (editing && editing.kind === 'deadline') ? editing
       : { title: '', basePts: 50, duty: false, targetT: '', targetQ: '', unitQ: '', mode: 'or', time: '', timeTo: '', deadline: '' };
     return '<div class="card">' +
       '<div style="font-weight:700; margin-bottom:2px">' + (editing ? '✏️ 수정' : '➕ 새 1회성 목표') + '</div>' +
-      commonHead(p, '이름', '예: 보고서 제출, 과제') +
-      targetFields(p) +
-      timeFields(p) +
-      '<label>마감일 (일찍 끝낼수록 보너스 ↑)</label>' +
+      titleField(p, '이름', '예: 보고서 제출, 과제') +
+      '<label>목표일</label>' +
       '<input id="f-deadline" type="date" value="' + (p.deadline || '') + '">' +
+      '<div class="sub" style="margin-top:2px">일찍 끝낼수록 보너스 ↑ · 지나도 ' + PR.points.lateKeepPct() + '%는 받아요</div>' +
+      pointsField(p) +
+      advanced(p, targetFields(p) + timeFields(p) + dutyField(p)) +
       '<div class="row" style="margin-top:12px">' +
         '<button id="f-save-deadline" class="grow">' + (editing ? '수정 저장' : '추가') + '</button>' +
         (editing ? '<button id="f-cancel" class="gray">취소</button>' : '') +
@@ -1863,7 +1906,8 @@ button.hcell.today.done{background:var(--accent)}
       return '<div class="plan ' + (pl.done ? 'done' : '') + '">' +
         '<div class="grow">' +
           '<div class="t">' + PR.esc(pl.title) + (pl.done ? ' <span class="chip d1">완료됨</span>' : '') + '</div>' +
-          '<div style="margin-top:4px">' + PR.vh.planChips(pl) + ' <span class="sub">기본 ' + pl.basePts + 'P</span></div>' +
+          '<div style="margin-top:4px">' + PR.vh.planChips(pl) +
+            ' <span class="sub">' + (pl.basePts ? '기본 ' + pl.basePts + 'P' : '포인트 없음') + '</span></div>' +
         '</div>' +
         (pl.done ? '<button class="gray small" data-undone="' + pl.id + '">완료 취소</button>' : '') +
         '<button class="ghost small" data-edit="' + pl.id + '">수정</button>' +
@@ -1885,9 +1929,9 @@ button.hcell.today.done{background:var(--accent)}
 
   function submitCommon(kind) {
     var title = document.getElementById('f-title').value.trim();
-    var base = Number(document.getElementById('f-base').value);
+    /* 포인트는 0도 허용 — 빈칸은 0으로 본다 (포인트 없이 기록만 하는 계획) */
+    var base = Math.max(0, Number(document.getElementById('f-base').value) || 0);
     if (!title) { PR.toast('이름을 입력해 주세요'); return null; }
-    if (!base || base < 1) { PR.toast('기본 포인트를 입력해 주세요'); return null; }
     return Object.assign({
       id: editing ? editing.id : PR.uid(),
       title: title, kind: kind, basePts: base,
@@ -1921,7 +1965,7 @@ button.hcell.today.done{background:var(--accent)}
     var p = submitCommon('deadline');
     if (!p) return;
     p.deadline = document.getElementById('f-deadline').value || '';
-    if (!p.deadline) { PR.toast('마감일을 입력해 주세요'); return; }
+    if (!p.deadline) { PR.toast('목표일을 입력해 주세요'); return; }
     var isEdit = !!editing;
     editing = null;
     PR.actions.savePlan(p, isEdit);
@@ -2021,7 +2065,7 @@ button.hcell.today.done{background:var(--accent)}
         '<div class="row">' +
           '<div class="grow"><label>완주 보너스 (P)</label>' +
             '<input id="pj-bonus" type="number" min="0" placeholder="예: 200"></div>' +
-          '<div class="grow"><label>마감 (선택 · 조기 완주 보너스 ↑)</label>' +
+          '<div class="grow"><label>목표일 (선택 · 조기 완주 보너스 ↑)</label>' +
             '<input id="pj-deadline" type="date"></div>' +
         '</div>' +
         '<label>단계 (마일스톤)</label>' +
@@ -2046,7 +2090,7 @@ button.hcell.today.done{background:var(--accent)}
       return '<div class="card">' +
         '<div class="row"><div class="grow">' +
           '<div class="t" style="font-weight:700">' + (pj.done ? '🏆 ' : '🚩 ') + PR.esc(pj.title) + '</div>' +
-          '<div class="sub">완주 보너스 ' + pj.bonusPts + 'P' + (pj.deadline ? ' · 마감 ' + pj.deadline : '') + (pj.done ? ' · ' + pj.doneDate + ' 완주' : '') + '</div>' +
+          '<div class="sub">완주 보너스 ' + pj.bonusPts + 'P' + (pj.deadline ? ' · 목표일 ' + pj.deadline : '') + (pj.done ? ' · ' + pj.doneDate + ' 완주' : '') + '</div>' +
         '</div>' +
         '<button class="danger small" data-pjdel="' + pj.id + '">삭제</button></div>' +
         PR.vh.progressBar(doneN, pj.milestones.length) +
@@ -2467,7 +2511,7 @@ button.hcell.today.done{background:var(--accent)}
     }
     var dots = '';
     if (info.dueFixed.length) dots += '<span class="cd"></span>';
-    if (info.dls.length || info.pjs.length) { // 마감일: 미완료 금색 / 전부 완료 초록
+    if (info.dls.length || info.pjs.length) { // 목표일: 미완료 금색 / 전부 완료 초록
       var allDone = info.dls.every(function (x) { return x.done; }) && info.pjs.every(function (x) { return x.done; });
       dots += '<span class="cd ' + (allDone ? 'dld' : 'dl') + '"></span>';
     }
@@ -2484,11 +2528,11 @@ button.hcell.today.done{background:var(--accent)}
 
     if (info.frozen) rows.push('<div class="hist"><span>🛡 방어막으로 보호된 날</span></div>');
     info.pjs.forEach(function (pj) {
-      rows.push('<div class="hist"><span>🚩 프로젝트 마감: <b>' + PR.esc(pj.title) + '</b></span>' +
+      rows.push('<div class="hist"><span>🚩 프로젝트 목표일: <b>' + PR.esc(pj.title) + '</b></span>' +
         (pj.done ? '<span class="chip d1">완주 ✓</span>' : '') + '</div>');
     });
     info.dls.forEach(function (p) {
-      rows.push('<div class="hist"><span>📌 마감: <b>' + PR.esc(p.title) + '</b> <span class="pts">' + p.basePts + 'P</span></span>' +
+      rows.push('<div class="hist"><span>📌 목표일: <b>' + PR.esc(p.title) + '</b>' + (p.basePts ? ' <span class="pts">' + p.basePts + 'P</span>' : '') + '</span>' +
         (p.done ? '<span class="chip d1">완료 ✓</span>' : (ds < today ? '<span class="chip d3">미완료</span>' : '')) + '</div>');
     });
     var act = canAct(ds);
@@ -2569,7 +2613,7 @@ button.hcell.today.done{background:var(--accent)}
       var legend = '<div class="sub" style="margin-top:8px">' +
         '<span class="cal-lg ok"></span>달성 <span class="cal-lg miss"></span>놓침 ' +
         '<span class="cal-lg frozen"></span>방어막 · <span class="cd" style="display:inline-block"></span> 예정 ' +
-        '<span class="cd dl" style="display:inline-block"></span> 마감 <span class="cd dld" style="display:inline-block"></span> 마감 완료</div>';
+        '<span class="cd dl" style="display:inline-block"></span> 목표일 <span class="cd dld" style="display:inline-block"></span> 목표 완료</div>';
 
       return '<h2>달력</h2><div class="card">' + head + grid + legend + '</div>' + detailHtml(selected);
     },
@@ -2632,12 +2676,13 @@ button.hcell.today.done{background:var(--accent)}
           '· 하기 싫고 머리 아픔 80~100P<br>' +
           '· 습관은 가볍게 5~20P 권장') +
         block('📐 지급 규칙',
-          '지급 = 기본P × 달성률² (부분 달성은 깎여서: 50% 달성 → 25%)<br>' +
+          '지급 = 기본P × 달성률^1.5 (조금이라도 하면 최소 10% 보장)<br>' +
           '완전 달성 시: 스트릭 +2%/일(최대 +50%) · 시간대 내 완료 +30%<br>' +
           '초과 달성: 초과분의 절반 요율, 최대 +50%<br>' +
+          '포인트를 0으로 두면 포인트 없이 기록만 하는 계획이 돼요<br>' +
           '의무 항목은 스트릭 카운트에서 제외') +
         block('🧭 계획 종류',
-          '· 📅 1회성: 마감일이 있는 목표. 일찍 끝낼수록 보너스↑, 지나면 지급 50%<br>' +
+          '· 📅 1회성: 목표일이 있는 일. 일찍 끝낼수록 보너스↑, 지나도 지급 ' + PR.points.lateKeepPct() + '%<br>' +
           '· 🔁 반복: 요일 고정 또는 주 n회 반복하는 일<br>' +
           '· 🌱 습관: 정해진 시각 없이 주기적으로. 단순 O/X 체크<br>' +
           '· 🚩 프로젝트: 여러 단계로 나눠 진행하는 큰 일') +
@@ -2646,7 +2691,15 @@ button.hcell.today.done{background:var(--accent)}
           '· 시간·분량을 둘 다 입력하면 달성 기준(OR/AND) 선택<br>' +
           '· 수행 시간대 안에 완료하면 정시 보너스 +30%<br>' +
           '· 끝 시각을 비우면 시작 시각 ±30분 내 완료 시 보너스<br>' +
-          '· 습관은 지난 날도 체크 가능 (소급은 보너스 없이 지급)');
+          '· 목표치·시간대·반복 기간은 계획 폼의 <b>세부 설정</b>에 접혀 있어요') +
+        block('🕓 늦게 기록하기',
+          '· 새벽 ' + PR.dayStart() + '시까지는 아직 <b>어제</b>로 기록돼요 — 자정을 넘겨 끝내도 보너스를 그대로 받아요 (설정에서 변경 가능)<br>' +
+          '· 그보다 더 지났다면 <b>달력</b>에서 그 날짜를 눌러 완료할 수 있어요 (14일 이내)<br>' +
+          '· 소급 완료는 스트릭·정시·서프라이즈 보너스가 빠지지만, 그날 쓴 방어막과 차감된 포인트는 돌려받아요') +
+        block('🎁 보상과 사용권',
+          '· 보상은 <b>여러 번</b>(살 때마다 사용권이 쌓임) 또는 <b>한 번만</b> 중에 골라요<br>' +
+          '· 구매하면 사용권이 발급되고, 실제로 누릴 때 눌러서 사용해요<br>' +
+          '· 안 쓴 사용권은 환불해서 포인트를 되돌릴 수 있어요');
     }
   });
 })(window.PR = window.PR || {});

@@ -33,7 +33,7 @@
             (!p.freq || p.freq.type !== 'weekly') && PR.sched.isScheduledOn(p, ds);
         });
         var avg = due.reduce(function (a, p) { return a + (p.basePts || 0); }, 0) / (due.length || 1);
-        missed.push({ ds: ds, pen: Math.max(1, Math.round(avg * PENALTY_RATE)) });
+        missed.push({ ds: ds, pen: Math.max(0, Math.round(avg * PENALTY_RATE)) });
       }
       d.setDate(d.getDate() + 1);
     }
@@ -47,7 +47,7 @@
         S.freezes--;
         S.frozenDates.push(m.ds);
         saved++;
-      } else if (S.penaltyOn) {            // 소액 차감 (상한까지만)
+      } else if (S.penaltyOn && m.pen > 0) { // 소액 차감 (상한까지만, 0P 계획은 제외)
         var room = PENALTY_CAP - penalty;
         if (room <= 0) return;
         var pen = Math.min(m.pen, room);

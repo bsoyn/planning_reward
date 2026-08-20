@@ -54,7 +54,7 @@
     }
     var dots = '';
     if (info.dueFixed.length) dots += '<span class="cd"></span>';
-    if (info.dls.length || info.pjs.length) { // 마감일: 미완료 금색 / 전부 완료 초록
+    if (info.dls.length || info.pjs.length) { // 목표일: 미완료 금색 / 전부 완료 초록
       var allDone = info.dls.every(function (x) { return x.done; }) && info.pjs.every(function (x) { return x.done; });
       dots += '<span class="cd ' + (allDone ? 'dld' : 'dl') + '"></span>';
     }
@@ -71,11 +71,11 @@
 
     if (info.frozen) rows.push('<div class="hist"><span>🛡 방어막으로 보호된 날</span></div>');
     info.pjs.forEach(function (pj) {
-      rows.push('<div class="hist"><span>🚩 프로젝트 마감: <b>' + PR.esc(pj.title) + '</b></span>' +
+      rows.push('<div class="hist"><span>🚩 프로젝트 목표일: <b>' + PR.esc(pj.title) + '</b></span>' +
         (pj.done ? '<span class="chip d1">완주 ✓</span>' : '') + '</div>');
     });
     info.dls.forEach(function (p) {
-      rows.push('<div class="hist"><span>📌 마감: <b>' + PR.esc(p.title) + '</b> <span class="pts">' + p.basePts + 'P</span></span>' +
+      rows.push('<div class="hist"><span>📌 목표일: <b>' + PR.esc(p.title) + '</b>' + (p.basePts ? ' <span class="pts">' + p.basePts + 'P</span>' : '') + '</span>' +
         (p.done ? '<span class="chip d1">완료 ✓</span>' : (ds < today ? '<span class="chip d3">미완료</span>' : '')) + '</div>');
     });
     var act = canAct(ds);
@@ -156,7 +156,7 @@
       var legend = '<div class="sub" style="margin-top:8px">' +
         '<span class="cal-lg ok"></span>달성 <span class="cal-lg miss"></span>놓침 ' +
         '<span class="cal-lg frozen"></span>방어막 · <span class="cd" style="display:inline-block"></span> 예정 ' +
-        '<span class="cd dl" style="display:inline-block"></span> 마감 <span class="cd dld" style="display:inline-block"></span> 마감 완료</div>';
+        '<span class="cd dl" style="display:inline-block"></span> 목표일 <span class="cd dld" style="display:inline-block"></span> 목표 완료</div>';
 
       return '<h2>달력</h2><div class="card">' + head + grid + legend + '</div>' + detailHtml(selected);
     },

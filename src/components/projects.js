@@ -12,7 +12,7 @@
         '<div class="row">' +
           '<div class="grow"><label>완주 보너스 (P)</label>' +
             '<input id="pj-bonus" type="number" min="0" placeholder="예: 200"></div>' +
-          '<div class="grow"><label>마감 (선택 · 조기 완주 보너스 ↑)</label>' +
+          '<div class="grow"><label>목표일 (선택 · 조기 완주 보너스 ↑)</label>' +
             '<input id="pj-deadline" type="date"></div>' +
         '</div>' +
         '<label>단계 (마일스톤)</label>' +
@@ -37,7 +37,7 @@
       return '<div class="card">' +
         '<div class="row"><div class="grow">' +
           '<div class="t" style="font-weight:700">' + (pj.done ? '🏆 ' : '🚩 ') + PR.esc(pj.title) + '</div>' +
-          '<div class="sub">완주 보너스 ' + pj.bonusPts + 'P' + (pj.deadline ? ' · 마감 ' + pj.deadline : '') + (pj.done ? ' · ' + pj.doneDate + ' 완주' : '') + '</div>' +
+          '<div class="sub">완주 보너스 ' + pj.bonusPts + 'P' + (pj.deadline ? ' · 목표일 ' + pj.deadline : '') + (pj.done ? ' · ' + pj.doneDate + ' 완주' : '') + '</div>' +
         '</div>' +
         '<button class="danger small" data-pjdel="' + pj.id + '">삭제</button></div>' +
         PR.vh.progressBar(doneN, pj.milestones.length) +

@@ -1,4 +1,8 @@
-/* 계획 탭: [1회성 (마감) | 반복] 세그먼트 + 종류별 전용 폼. 프로젝트는 전용 탭으로 분리 */
+/* 계획 탭: [1회성 | 반복 | 습관 | 프로젝트] 세그먼트 + 종류별 전용 폼. 프로젝트는 전용 탭으로 분리.
+
+   폼 구성 원칙: 겉에는 꼭 필요한 것만 — 이름 · 언제(요일/목표일) · 포인트.
+   목표치·시간대·반복 기간·의무는 '세부 설정'(details)에 접어 둔다. 접혀 있어도
+   DOM에는 남아 있으므로 제출 로직(getElementById)은 그대로 동작한다. */
 (function (PR) {
   'use strict';
 
@@ -39,16 +43,33 @@
       '</div>';
   }
 
-  function commonHead(p, label, ph) {
-    return '<div class="row">' +
-      '<div class="grow" style="flex:2"><label>' + label + '</label>' +
-        '<input id="f-title" placeholder="' + ph + '" value="' + PR.esc(p.title) + '"></div>' +
-      '<div class="grow"><label>기본 포인트</label>' +
-        '<input id="f-base" type="number" min="1" value="' + (p.basePts || '') + '" placeholder="30"></div>' +
-    '</div>' +
-    '<label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:10px">' +
+  function titleField(p, label, ph) {
+    return '<label>' + label + '</label>' +
+      '<input id="f-title" placeholder="' + ph + '" value="' + PR.esc(p.title) + '">';
+  }
+
+  /* 포인트 — 0(또는 빈칸)이면 포인트 없이 기록만 하는 계획 */
+  function pointsField(p) {
+    return '<label>포인트</label>' +
+      '<input id="f-base" type="number" min="0" value="' + (p.basePts != null && p.basePts !== '' ? p.basePts : '') + '" placeholder="0">' +
+      '<div class="sub" style="margin-top:2px">비우거나 0이면 포인트 없이 기록만 해요 · 가볍게 10~20, 무난 30~50, 힘든 일 80~100</div>';
+  }
+
+  function dutyField(p) {
+    return '<label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:10px">' +
       '<input type="checkbox" id="f-duty" style="width:auto"' + (p.duty ? ' checked' : '') + '>' +
       '의무 (알바·출근·수업 — 스트릭 제외)</label>';
+  }
+
+  /* 기본값이 아닌 세부 항목이 있으면 '세부 설정'을 펼친 채로 연다 */
+  function hasAdvanced(p) {
+    return !!(p.targetT || p.targetQ || p.time || p.timeTo || p.duty || p.endDate ||
+      (p.startDate && p.startDate !== PR.todayStr()));
+  }
+
+  function advanced(p, inner) {
+    return '<details class="adv"' + (hasAdvanced(p) ? ' open' : '') + '>' +
+      '<summary>⚙️ 세부 설정 — 목표치 · 시간대 · 기간 · 의무</summary>' + inner + '</details>';
   }
 
   /* ---------------- 반복적인 일 폼 ---------------- */
@@ -62,23 +83,22 @@
     }).join('');
     return '<div class="card">' +
       '<div style="font-weight:700; margin-bottom:2px">' + (editing ? '✏️ 수정' : '➕ 새 반복적인 일') + '</div>' +
-      commonHead(p, '이름', '예: 독서, 영어 공부, 알바') +
-      targetFields(p) +
-      timeFields(p) +
-      '<label>반복 방식</label>' +
+      titleField(p, '이름', '예: 독서, 영어 공부, 알바') +
+      '<label>언제</label>' +
       '<div class="row">' +
         '<button type="button" class="grow ' + (f.type !== 'weekly' ? '' : 'gray') + '" id="f-ftype-days">요일 고정</button>' +
         '<button type="button" class="grow ' + (f.type === 'weekly' ? '' : 'gray') + '" id="f-ftype-weekly">주 n회</button>' +
       '</div>' +
       '<div id="f-days-wrap" class="' + (f.type === 'weekly' ? 'hidden' : '') + '">' +
-        '<label>요일 (선택 안 하면 매일)</label>' +
-        '<div class="daybtns" id="f-days">' + dayBtns + '</div>' +
+        '<div class="daybtns" id="f-days" style="margin-top:8px">' + dayBtns + '</div>' +
+        '<div class="sub" style="margin-top:2px">선택 안 하면 매일</div>' +
       '</div>' +
       '<div id="f-weekly-wrap" class="' + (f.type === 'weekly' ? '' : 'hidden') + '">' +
         '<label>주당 횟수</label>' +
         '<input id="f-wn" type="number" min="1" max="7" value="' + (f.n || 3) + '">' +
       '</div>' +
-      PR.vh.rangeFields(p, 'f') +
+      pointsField(p) +
+      advanced(p, targetFields(p) + timeFields(p) + PR.vh.rangeFields(p, 'f') + dutyField(p)) +
       '<div class="row" style="margin-top:12px">' +
         '<button id="f-save-routine" class="grow">' + (editing ? '수정 저장' : '추가') + '</button>' +
         (editing ? '<button id="f-cancel" class="gray">취소</button>' : '') +
@@ -86,17 +106,18 @@
     '</div>';
   }
 
-  /* ---------------- 1회성 (마감) 폼 ---------------- */
+  /* ---------------- 1회성 (목표일) 폼 ---------------- */
   function deadlineForm() {
     var p = (editing && editing.kind === 'deadline') ? editing
       : { title: '', basePts: 50, duty: false, targetT: '', targetQ: '', unitQ: '', mode: 'or', time: '', timeTo: '', deadline: '' };
     return '<div class="card">' +
       '<div style="font-weight:700; margin-bottom:2px">' + (editing ? '✏️ 수정' : '➕ 새 1회성 목표') + '</div>' +
-      commonHead(p, '이름', '예: 보고서 제출, 과제') +
-      targetFields(p) +
-      timeFields(p) +
-      '<label>마감일 (일찍 끝낼수록 보너스 ↑)</label>' +
+      titleField(p, '이름', '예: 보고서 제출, 과제') +
+      '<label>목표일</label>' +
       '<input id="f-deadline" type="date" value="' + (p.deadline || '') + '">' +
+      '<div class="sub" style="margin-top:2px">일찍 끝낼수록 보너스 ↑ · 지나도 ' + PR.points.lateKeepPct() + '%는 받아요</div>' +
+      pointsField(p) +
+      advanced(p, targetFields(p) + timeFields(p) + dutyField(p)) +
       '<div class="row" style="margin-top:12px">' +
         '<button id="f-save-deadline" class="grow">' + (editing ? '수정 저장' : '추가') + '</button>' +
         (editing ? '<button id="f-cancel" class="gray">취소</button>' : '') +
@@ -116,7 +137,8 @@
       return '<div class="plan ' + (pl.done ? 'done' : '') + '">' +
         '<div class="grow">' +
           '<div class="t">' + PR.esc(pl.title) + (pl.done ? ' <span class="chip d1">완료됨</span>' : '') + '</div>' +
-          '<div style="margin-top:4px">' + PR.vh.planChips(pl) + ' <span class="sub">기본 ' + pl.basePts + 'P</span></div>' +
+          '<div style="margin-top:4px">' + PR.vh.planChips(pl) +
+            ' <span class="sub">' + (pl.basePts ? '기본 ' + pl.basePts + 'P' : '포인트 없음') + '</span></div>' +
         '</div>' +
         (pl.done ? '<button class="gray small" data-undone="' + pl.id + '">완료 취소</button>' : '') +
         '<button class="ghost small" data-edit="' + pl.id + '">수정</button>' +
@@ -138,9 +160,9 @@
 
   function submitCommon(kind) {
     var title = document.getElementById('f-title').value.trim();
-    var base = Number(document.getElementById('f-base').value);
+    /* 포인트는 0도 허용 — 빈칸은 0으로 본다 (포인트 없이 기록만 하는 계획) */
+    var base = Math.max(0, Number(document.getElementById('f-base').value) || 0);
     if (!title) { PR.toast('이름을 입력해 주세요'); return null; }
-    if (!base || base < 1) { PR.toast('기본 포인트를 입력해 주세요'); return null; }
     return Object.assign({
       id: editing ? editing.id : PR.uid(),
       title: title, kind: kind, basePts: base,
@@ -174,7 +196,7 @@
     var p = submitCommon('deadline');
     if (!p) return;
     p.deadline = document.getElementById('f-deadline').value || '';
-    if (!p.deadline) { PR.toast('마감일을 입력해 주세요'); return; }
+    if (!p.deadline) { PR.toast('목표일을 입력해 주세요'); return; }
     var isEdit = !!editing;
     editing = null;
     PR.actions.savePlan(p, isEdit);

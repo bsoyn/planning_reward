@@ -65,6 +65,9 @@ nav button.on{color:var(--ink)}
 .hist{font-size:13px; padding:9px 0; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px}
 .hist:last-child{border:none}
 details summary{cursor:pointer; font-weight:600; font-size:14px; padding:5px 0}
+/* 계획 폼의 접히는 세부 설정 — 기본은 닫아두고 필수 항목만 보이게 */
+details.adv{border-top:1px solid var(--line); margin-top:14px; padding-top:2px}
+details.adv>summary{color:var(--sub); font-weight:600; font-size:13.5px}
 .hidden{display:none}
 
 /* 프로젝트 진행률 바, 완료 입력 폼 */

@@ -52,7 +52,7 @@
       }).join('');
       return '<div class="hgrid"><div style="min-width:0">' +
         '<div class="t" style="font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">' + PR.esc(p.title) + '</div>' +
-        '<div class="sub">🔥' + st.n + st.unit + ' · +' + p.basePts + 'P' + quota + '</div>' +
+        '<div class="sub">🔥' + st.n + st.unit + ' · ' + (p.basePts ? '+' + p.basePts + 'P' : '기록만') + quota + '</div>' +
       '</div>' + cells + '</div>';
     }).join('');
 
@@ -66,29 +66,30 @@
     var dayBtns = PR.DAYS.map(function (d, i) {
       return '<button type="button" class="' + ((f.days || []).indexOf(i) !== -1 ? 'on' : '') + '" data-day="' + i + '">' + d + '</button>';
     }).join('');
+    var advOpen = !!(p.endDate || (p.startDate && p.startDate !== PR.todayStr()));
     return '<div class="card">' +
       '<div style="font-weight:700; margin-bottom:2px">' + (editing ? '✏️ 습관 수정' : '➕ 새 습관') + '</div>' +
-      '<div class="row">' +
-        '<div class="grow" style="flex:2"><label>습관 이름</label>' +
-          '<input id="h-title" placeholder="예: 물 2L, 스트레칭" value="' + PR.esc(p.title) + '"></div>' +
-        '<div class="grow"><label>포인트</label>' +
-          '<input id="h-base" type="number" min="1" value="' + (p.basePts || '') + '"></div>' +
-      '</div>' +
-      '<div class="sub" style="margin-top:4px">습관은 가볍게 5~20P 권장</div>' +
-      '<label>반복 방식</label>' +
+      '<label>습관 이름</label>' +
+      '<input id="h-title" placeholder="예: 물 2L, 스트레칭" value="' + PR.esc(p.title) + '">' +
+      '<label>언제</label>' +
       '<div class="row">' +
         '<button type="button" class="grow ' + (f.type !== 'weekly' ? '' : 'gray') + '" id="h-ftype-days">요일 고정</button>' +
         '<button type="button" class="grow ' + (f.type === 'weekly' ? '' : 'gray') + '" id="h-ftype-weekly">주 n회</button>' +
       '</div>' +
       '<div id="h-days-wrap" class="' + (f.type === 'weekly' ? 'hidden' : '') + '">' +
-        '<label>요일 (선택 안 하면 매일)</label>' +
-        '<div class="daybtns" id="h-days">' + dayBtns + '</div>' +
+        '<div class="daybtns" id="h-days" style="margin-top:8px">' + dayBtns + '</div>' +
+        '<div class="sub" style="margin-top:2px">선택 안 하면 매일</div>' +
       '</div>' +
       '<div id="h-weekly-wrap" class="' + (f.type === 'weekly' ? '' : 'hidden') + '">' +
         '<label>주당 횟수</label>' +
         '<input id="h-wn" type="number" min="1" max="7" value="' + (f.n || 3) + '">' +
       '</div>' +
-      PR.vh.rangeFields(p, 'h') +
+      '<label>포인트</label>' +
+      '<input id="h-base" type="number" min="0" value="' + (p.basePts != null && p.basePts !== '' ? p.basePts : '') + '" placeholder="0">' +
+      '<div class="sub" style="margin-top:2px">습관은 가볍게 5~20P 권장 · 비우거나 0이면 기록만 해요</div>' +
+      '<details class="adv"' + (advOpen ? ' open' : '') + '>' +
+        '<summary>⚙️ 세부 설정 — 반복 기간</summary>' + PR.vh.rangeFields(p, 'h') +
+      '</details>' +
       '<div class="row" style="margin-top:12px">' +
         '<button id="h-save" class="grow">' + (editing ? '수정 저장' : '습관 추가') + '</button>' +
         (editing ? '<button id="h-cancel" class="gray">취소</button>' : '') +
@@ -107,7 +108,7 @@
         var period = PR.sched.isExpired(p) ? ' · <span style="color:var(--sub)">기간 종료(' + p.endDate + ')</span>'
           : (p.endDate ? ' · ~' + p.endDate : '');
         return '<div class="plan"><div class="grow"><div class="t">' + PR.esc(p.title) + '</div>' +
-          '<div class="sub">' + dd + ' · +' + p.basePts + 'P' + period + '</div></div>' +
+          '<div class="sub">' + dd + ' · ' + (p.basePts ? '+' + p.basePts + 'P' : '기록만') + period + '</div></div>' +
           '<button class="ghost small" data-hedit="' + p.id + '">수정</button>' +
           '<button class="danger small" data-hdel="' + p.id + '">삭제</button></div>';
       }).join('') + '</details></div>';
@@ -115,9 +116,9 @@
 
   function submit() {
     var title = document.getElementById('h-title').value.trim();
-    var base = Number(document.getElementById('h-base').value);
+    /* 포인트는 0도 허용 — 빈칸은 0으로 본다 (포인트 없이 기록만) */
+    var base = Math.max(0, Number(document.getElementById('h-base').value) || 0);
     if (!title) { PR.toast('습관 이름을 입력해 주세요'); return; }
-    if (!base || base < 1) { PR.toast('포인트를 입력해 주세요'); return; }
     var range = PR.vh.readRange('h');
     if (!range) return;
     var weekly = !document.getElementById('h-weekly-wrap').classList.contains('hidden');
