@@ -188,7 +188,7 @@ button.hcell.today.done{background:var(--accent)}
 /* ===== core/store.js ===== */
 /* 상태 저장소: localStorage 영속화. 모든 상태 변경은 actions를 통해서만.
 
-   데이터 모델 v5
+   데이터 모델 v6
    plan = { id, title, kind:'habit'|'routine'|'deadline', basePts, duty,
             targetT(분|null), targetQ(수|null), unitQ, mode:'or'|'and',   // routine/deadline
             time:'HH:MM'|'',                                             // routine
@@ -205,13 +205,18 @@ button.hcell.today.done{background:var(--accent)}
    log  = { id, planId, date, pts, r, full, duty, onTime, surprise, ts }  // 마일스톤 planId='ms:...', 페널티 planId='penalty'
    project = { id, title, bonusPts, deadline, createdAt, done, doneDate,
                milestones:[{id,title,pts,done,date}] }
+   reward   = { id, name, cost, once }            // once=true면 딱 한 번만 살 수 있는 보상
+   purchase = { id, rewardId, name, cost, date, used, usedAt }   // 구매 = 사용권(티켓) 1장
+   - 구매하면 티켓이 발급되고, 실제로 누릴 때 '사용'을 눌러 소진한다. 다회성 보상은
+     티켓이 여러 장 쌓이고, 1회성은 티켓이 남아 있는 동안 상점에서 '구매함'으로 잠긴다
+     (소진 여부는 플래그가 아니라 티켓 유무에서 파생 — 상태 불일치가 생길 여지를 없앰).
    v4 심리 보강 필드: freezes(방어막), freezeMark(방어막 지급 눈금), frozenDates(방어막 보호일),
                      lastReconcile(마지막 정산일), penaltyOn(놓친 날 차감 여부) */
 (function (PR) {
   'use strict';
 
   var LS_KEY = 'planning_reward_v1'; // 키는 유지 (내용의 v 필드로 버전 관리)
-  var VER = 5;
+  var VER = 6;
 
   function blank() {
     return { v: VER, points: 0, earned: 0, plans: [], logs: [], projects: [], rewards: [], purchases: [], bestStreak: 0, lastMod: 0,
@@ -287,12 +292,29 @@ button.hcell.today.done{background:var(--accent)}
     return d;
   }
 
+  /* v5 → v6: 보상 1회성/다회성 + 구매를 사용권(티켓)으로.
+     기존 보상은 전부 다회성(=지금까지의 동작 그대로), 기존 구매 내역은 이미 누린 것으로
+     보고 사용 완료 처리한다 (안 그러면 예전 구매가 전부 미사용 티켓으로 되살아남). */
+  function migrateV5(d) {
+    d.rewards = (d.rewards || []).map(function (r) {
+      return Object.assign({ once: false }, r);
+    });
+    var byName = {};
+    d.rewards.forEach(function (r) { byName[r.name] = r.id; });
+    d.purchases = (d.purchases || []).map(function (p) {
+      return Object.assign({ rewardId: byName[p.name] || '', used: true, usedAt: p.date || '' }, p);
+    });
+    d.v = 6;
+    return d;
+  }
+
   function normalize(d) {
     if (!d || !d.v) return blank();
     if (d.v === 1) d = migrateV1(d);
     if (d.v === 2) d = migrateV2(d);
     if (d.v === 3) d = migrateV3(d);
     if (d.v === 4) d = migrateV4(d);
+    if (d.v === 5) d = migrateV5(d);
     if (d.v !== VER) return blank();
     return Object.assign(blank(), d);
   }
@@ -789,9 +811,18 @@ button.hcell.today.done{background:var(--accent)}
     commit();
   };
 
-  /* ---- 보상 ---- */
-  A.addReward = function (name, cost) {
-    PR.store.state.rewards.push({ id: PR.uid(), name: name, cost: cost });
+  /* ---- 보상 & 사용권(티켓) ----
+     구매 = 티켓 발급, 사용 = 티켓 소진. 다회성 보상은 티켓이 여러 장 쌓이고,
+     1회성은 티켓이 남아 있는 동안 상점에서 잠긴다. */
+
+  /* 1회성 보상이 이미 소진됐는지 — 플래그가 아니라 티켓 유무에서 파생 */
+  A.isSoldOut = function (r) {
+    if (!r || !r.once) return false;
+    return PR.store.state.purchases.some(function (x) { return x.rewardId === r.id; });
+  };
+
+  A.addReward = function (name, cost, once) {
+    PR.store.state.rewards.push({ id: PR.uid(), name: name, cost: cost, once: !!once });
     commit();
   };
 
@@ -804,11 +835,44 @@ button.hcell.today.done{background:var(--accent)}
   A.buyReward = function (id) {
     var S = PR.store.state;
     var r = S.rewards.find(function (x) { return x.id === id; });
-    if (!r || S.points < r.cost) return;
+    if (!r || S.points < r.cost || A.isSoldOut(r)) return;
     S.points -= r.cost;
-    S.purchases.push({ id: PR.uid(), name: r.name, cost: r.cost, date: PR.todayStr() });
+    S.purchases.push({ id: PR.uid(), rewardId: r.id, name: r.name, cost: r.cost,
+                       date: PR.todayStr(), used: false, usedAt: '' });
     commit();
-    PR.toast('🎉 "' + PR.esc(r.name) + '" 구매! 마음껏 즐기세요');
+    PR.toast('🎟 "' + PR.esc(r.name) + '" 사용권을 받았어요!' +
+      '<br><span style="opacity:.75">쓰고 싶을 때 상점에서 사용하세요</span>');
+  };
+
+  /* 티켓 사용 (실제로 누릴 때) */
+  A.useTicket = function (id) {
+    var t = PR.store.state.purchases.find(function (x) { return x.id === id; });
+    if (!t || t.used) return;
+    t.used = true;
+    t.usedAt = PR.todayStr();
+    commit();
+    PR.toast('🎉 "' + PR.esc(t.name) + '" 사용! 마음껏 즐기세요');
+  };
+
+  /* 잘못 눌러 사용 처리된 티켓 되돌리기 */
+  A.unuseTicket = function (id) {
+    var t = PR.store.state.purchases.find(function (x) { return x.id === id; });
+    if (!t || !t.used) return;
+    t.used = false;
+    t.usedAt = '';
+    commit();
+  };
+
+  /* 아직 안 쓴 티켓 환불 — 포인트를 돌려주고 티켓을 없앤다.
+     1회성 보상은 티켓이 사라지면 자동으로 다시 살 수 있게 된다(파생 계산이므로). */
+  A.refundTicket = function (id) {
+    var S = PR.store.state;
+    var t = S.purchases.find(function (x) { return x.id === id; });
+    if (!t || t.used) return;
+    S.points += t.cost;
+    S.purchases = S.purchases.filter(function (x) { return x.id !== id; });
+    commit();
+    PR.toast('↩️ 구매 취소 · +' + t.cost + 'P 돌려받음');
   };
 
   /* ---- 번외 기록: 계획에 없던 일. 가치의 80% 지급, 보너스·스트릭 없음 ---- */
@@ -1204,6 +1268,7 @@ button.hcell.today.done{background:var(--accent)}
       var today = PR.todayStr();
       var todayPts = S.logs.filter(function (l) { return l.date === today; })
         .reduce(function (a, l) { return a + l.pts; }, 0);
+      var tickets = S.purchases.filter(function (p) { return !p.used; }).length; // 안 쓴 사용권
       return '' +
         '<div class="hero">' +
           '<div class="row"><div class="grow">' +
@@ -1214,6 +1279,7 @@ button.hcell.today.done{background:var(--accent)}
             '<span class="badge">🔥 스트릭 ' + st + '일</span>' +
             '<span class="badge">🏆 최고 ' + S.bestStreak + '일</span>' +
             '<span class="badge">🛡 방어막 ' + (S.freezes || 0) + '</span>' +
+            (tickets ? '<span class="badge">🎟 사용권 ' + tickets + '</span>' : '') +
           '</div>' +
         '</div>';
     }
@@ -1929,51 +1995,144 @@ button.hcell.today.done{background:var(--accent)}
 })(window.PR = window.PR || {});
 
 /* ===== components/shop.js ===== */
-/* 보상 탭: 보상 등록/구매 + 구매 내역 */
+/* 보상 탭: 내 사용권(티켓) → 보상 등록 → 보상 목록 → 사용 내역
+   구매하면 사용권 1장이 발급되고, 실제로 누릴 때 '사용'을 눌러 소진한다.
+   다회성 보상은 티켓이 여러 장 쌓이고, 1회성은 티켓이 있는 동안 잠긴다. */
 (function (PR) {
   'use strict';
 
+  /* 미사용 티켓을 보상별로 묶기 (같은 보상은 ×N) — 오래된 것부터 사용(FIFO) */
+  function ticketGroups() {
+    var open = PR.store.state.purchases.filter(function (p) { return !p.used; });
+    var order = [];
+    var by = {};
+    open.forEach(function (t) {
+      var k = t.rewardId || ('name:' + t.name);
+      if (!by[k]) { by[k] = { key: k, name: t.name, cost: t.cost, items: [] }; order.push(k); }
+      by[k].items.push(t);
+    });
+    return order.map(function (k) { return by[k]; });
+  }
+
+  function ticketCard() {
+    var groups = ticketGroups();
+    if (!groups.length) return '';
+    var n = groups.reduce(function (a, g) { return a + g.items.length; }, 0);
+    var rows = groups.map(function (g) {
+      var first = g.items[0]; // 가장 먼저 산 티켓부터 사용
+      return '<div class="plan">' +
+        '<div class="grow"><div class="t">🎟 ' + PR.esc(g.name) +
+          (g.items.length > 1 ? ' <span class="chip d1">×' + g.items.length + '</span>' : '') + '</div>' +
+          '<div class="sub">' + first.date + ' 구매 · ' + g.cost.toLocaleString() + 'P</div></div>' +
+        '<button class="small" data-use="' + first.id + '">사용</button>' +
+        '<button class="ghost small" data-refund="' + first.id + '">환불</button>' +
+      '</div>';
+    }).join('');
+    return '<div class="card">' +
+      '<div style="font-weight:700">🎟 내 사용권 (' + n + '장)</div>' +
+      '<div class="sub" style="margin-top:2px">사 두고 아껴 뒀다가, 누릴 때 눌러서 사용하세요</div>' +
+      '<div style="margin-top:8px">' + rows + '</div>' +
+    '</div>';
+  }
+
+  function formCard() {
+    return '<div class="card">' +
+      '<div style="font-weight:700">🎁 보상 등록</div>' +
+      '<label>보상 이름</label><input id="r-name" placeholder="예: 유튜브 30분, 치킨 시키기, 게임 1시간">' +
+      '<label>가격 (P)</label><input id="r-cost" type="number" min="1" placeholder="100">' +
+      '<label>구매 방식</label>' +
+      '<div class="row">' +
+        '<button type="button" class="grow" id="r-many">🔁 여러 번</button>' +
+        '<button type="button" class="grow gray" id="r-once">1️⃣ 한 번만</button>' +
+      '</div>' +
+      '<div class="sub" style="margin-top:4px">여러 번: 살 때마다 사용권이 쌓여요 · 한 번만: 딱 한 장만 살 수 있어요</div>' +
+      '<button id="r-add" style="margin-top:10px; width:100%">등록</button>' +
+    '</div>';
+  }
+
+  function listCard() {
+    var S = PR.store.state;
+    if (!S.rewards.length) {
+      return '<div class="card"><div class="empty">보상을 등록해 보세요!<br>동기부여가 되는 것일수록 좋아요 🎯</div></div>';
+    }
+    var rows = S.rewards.map(function (r) {
+      var sold = PR.actions.isSoldOut(r);
+      var kind = r.once
+        ? '<span class="chip" style="background:#fdf0e8;color:#d97706">한 번만</span>'
+        : '<span class="chip" style="background:#f0f0f5;color:#999">여러 번</span>';
+      var held = S.purchases.filter(function (x) { return x.rewardId === r.id && !x.used; }).length;
+      return '<div class="plan ' + (sold ? 'done' : '') + '">' +
+        '<div class="grow"><div class="t">' + PR.esc(r.name) + ' ' + kind +
+          (held ? ' <span class="chip d1">사용권 ' + held + '장</span>' : '') + '</div>' +
+          '<div class="sub pts">' + r.cost.toLocaleString() + ' P</div></div>' +
+        (sold
+          ? '<button class="gray small" disabled>구매함</button>'
+          : '<button class="small" data-buy="' + r.id + '"' + (S.points < r.cost ? ' disabled' : '') + '>구매</button>') +
+        '<button class="danger small" data-rdel="' + r.id + '">✕</button>' +
+      '</div>';
+    }).join('');
+    return '<div class="card">' + rows + '</div>';
+  }
+
+  function historyCard() {
+    var used = PR.store.state.purchases.filter(function (p) { return p.used; });
+    if (!used.length) return '';
+    var rows = used.slice().reverse().slice(0, 30).map(function (h) {
+      return '<div class="hist"><span>🛍 ' + PR.esc(h.name) + '</span>' +
+        '<span class="sub">' + (h.usedAt || h.date) + ' 사용 · -' + h.cost + 'P ' +
+        '<button class="ghost small" data-unuse="' + h.id + '">되돌리기</button></span></div>';
+    }).join('');
+    return '<div class="card"><details><summary>사용 내역 (' + used.length + ')</summary>' + rows + '</details></div>';
+  }
+
   PR.app.register('shop', {
     render: function () {
-      var S = PR.store.state;
-      var form = '<div class="card">' +
-        '<div style="font-weight:700">🎁 보상 등록</div>' +
-        '<label>보상 이름</label><input id="r-name" placeholder="예: 유튜브 30분, 치킨 시키기, 게임 1시간">' +
-        '<label>가격 (P)</label><input id="r-cost" type="number" min="1" placeholder="100">' +
-        '<button id="r-add" style="margin-top:10px; width:100%">등록</button>' +
-      '</div>';
-
-      var list = S.rewards.length ? S.rewards.map(function (r) {
-        return '<div class="plan">' +
-          '<div class="grow"><div class="t">' + PR.esc(r.name) + '</div><div class="sub pts">' + r.cost.toLocaleString() + ' P</div></div>' +
-          '<button class="small" data-buy="' + r.id + '"' + (S.points < r.cost ? ' disabled' : '') + '>구매</button>' +
-          '<button class="danger small" data-rdel="' + r.id + '">✕</button>' +
-        '</div>';
-      }).join('') : '<div class="empty">보상을 등록해 보세요!<br>동기부여가 되는 것일수록 좋아요 🎯</div>';
-
-      var hist = S.purchases.slice().reverse().slice(0, 30).map(function (h) {
-        return '<div class="hist"><span>🛍 ' + PR.esc(h.name) + '</span><span class="sub">' + h.date + ' · -' + h.cost + 'P</span></div>';
-      }).join('');
-
-      return '<h2>보상 상점</h2>' + form + '<div class="card">' + list + '</div>' +
-        (hist ? '<div class="card"><details><summary>구매 내역 (' + S.purchases.length + ')</summary>' + hist + '</details></div>' : '');
+      return '<h2>보상 상점</h2>' + ticketCard() + formCard() + listCard() + historyCard();
     },
 
     bind: function (root) {
       root.onclick = function (e) {
         var b = e.target.closest('button');
         if (!b) return;
+
+        /* 구매 방식 토글 (선택된 쪽이 진하게) */
+        if (b.id === 'r-many' || b.id === 'r-once') {
+          var once = b.id === 'r-once';
+          document.getElementById('r-many').className = 'grow ' + (once ? 'gray' : '');
+          document.getElementById('r-once').className = 'grow ' + (once ? '' : 'gray');
+          return;
+        }
         if (b.id === 'r-add') {
           var name = document.getElementById('r-name').value.trim();
           var cost = Math.max(1, Number(document.getElementById('r-cost').value) || 0);
           if (!name || !cost) { PR.toast('이름과 가격을 입력해 주세요'); return; }
-          PR.actions.addReward(name, cost);
+          var isOnce = !document.getElementById('r-once').classList.contains('gray');
+          PR.actions.addReward(name, cost, isOnce);
+          return;
         }
         if (b.dataset.buy) {
           var r = PR.store.state.rewards.find(function (x) { return x.id === b.dataset.buy; });
-          if (r && confirm('"' + r.name + '" 을(를) ' + r.cost + 'P로 구매할까요?')) PR.actions.buyReward(b.dataset.buy);
+          if (r && confirm('"' + r.name + '" 을(를) ' + r.cost + 'P로 구매할까요?\n사용권 1장이 발급돼요.')) {
+            PR.actions.buyReward(b.dataset.buy);
+          }
+          return;
         }
-        if (b.dataset.rdel && confirm('이 보상을 삭제할까요?')) PR.actions.deleteReward(b.dataset.rdel);
+        if (b.dataset.use) {
+          var t = PR.store.state.purchases.find(function (x) { return x.id === b.dataset.use; });
+          if (t && confirm('"' + t.name + '" 사용권을 지금 쓸까요?')) PR.actions.useTicket(b.dataset.use);
+          return;
+        }
+        if (b.dataset.refund && confirm('아직 안 쓴 사용권을 환불할까요? 포인트를 돌려받아요.')) {
+          PR.actions.refundTicket(b.dataset.refund);
+          return;
+        }
+        if (b.dataset.unuse && confirm('사용을 취소하고 사용권으로 되돌릴까요?')) {
+          PR.actions.unuseTicket(b.dataset.unuse);
+          return;
+        }
+        if (b.dataset.rdel && confirm('이 보상을 삭제할까요? (이미 산 사용권은 그대로 남아요)')) {
+          PR.actions.deleteReward(b.dataset.rdel);
+        }
       };
     }
   });

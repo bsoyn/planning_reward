@@ -1,6 +1,6 @@
 /* 상태 저장소: localStorage 영속화. 모든 상태 변경은 actions를 통해서만.
 
-   데이터 모델 v5
+   데이터 모델 v6
    plan = { id, title, kind:'habit'|'routine'|'deadline', basePts, duty,
             targetT(분|null), targetQ(수|null), unitQ, mode:'or'|'and',   // routine/deadline
             time:'HH:MM'|'',                                             // routine
@@ -17,13 +17,18 @@
    log  = { id, planId, date, pts, r, full, duty, onTime, surprise, ts }  // 마일스톤 planId='ms:...', 페널티 planId='penalty'
    project = { id, title, bonusPts, deadline, createdAt, done, doneDate,
                milestones:[{id,title,pts,done,date}] }
+   reward   = { id, name, cost, once }            // once=true면 딱 한 번만 살 수 있는 보상
+   purchase = { id, rewardId, name, cost, date, used, usedAt }   // 구매 = 사용권(티켓) 1장
+   - 구매하면 티켓이 발급되고, 실제로 누릴 때 '사용'을 눌러 소진한다. 다회성 보상은
+     티켓이 여러 장 쌓이고, 1회성은 티켓이 남아 있는 동안 상점에서 '구매함'으로 잠긴다
+     (소진 여부는 플래그가 아니라 티켓 유무에서 파생 — 상태 불일치가 생길 여지를 없앰).
    v4 심리 보강 필드: freezes(방어막), freezeMark(방어막 지급 눈금), frozenDates(방어막 보호일),
                      lastReconcile(마지막 정산일), penaltyOn(놓친 날 차감 여부) */
 (function (PR) {
   'use strict';
 
   var LS_KEY = 'planning_reward_v1'; // 키는 유지 (내용의 v 필드로 버전 관리)
-  var VER = 5;
+  var VER = 6;
 
   function blank() {
     return { v: VER, points: 0, earned: 0, plans: [], logs: [], projects: [], rewards: [], purchases: [], bestStreak: 0, lastMod: 0,
@@ -99,12 +104,29 @@
     return d;
   }
 
+  /* v5 → v6: 보상 1회성/다회성 + 구매를 사용권(티켓)으로.
+     기존 보상은 전부 다회성(=지금까지의 동작 그대로), 기존 구매 내역은 이미 누린 것으로
+     보고 사용 완료 처리한다 (안 그러면 예전 구매가 전부 미사용 티켓으로 되살아남). */
+  function migrateV5(d) {
+    d.rewards = (d.rewards || []).map(function (r) {
+      return Object.assign({ once: false }, r);
+    });
+    var byName = {};
+    d.rewards.forEach(function (r) { byName[r.name] = r.id; });
+    d.purchases = (d.purchases || []).map(function (p) {
+      return Object.assign({ rewardId: byName[p.name] || '', used: true, usedAt: p.date || '' }, p);
+    });
+    d.v = 6;
+    return d;
+  }
+
   function normalize(d) {
     if (!d || !d.v) return blank();
     if (d.v === 1) d = migrateV1(d);
     if (d.v === 2) d = migrateV2(d);
     if (d.v === 3) d = migrateV3(d);
     if (d.v === 4) d = migrateV4(d);
+    if (d.v === 5) d = migrateV5(d);
     if (d.v !== VER) return blank();
     return Object.assign(blank(), d);
   }

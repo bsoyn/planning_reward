@@ -9,6 +9,7 @@
       var today = PR.todayStr();
       var todayPts = S.logs.filter(function (l) { return l.date === today; })
         .reduce(function (a, l) { return a + l.pts; }, 0);
+      var tickets = S.purchases.filter(function (p) { return !p.used; }).length; // 안 쓴 사용권
       return '' +
         '<div class="hero">' +
           '<div class="row"><div class="grow">' +
@@ -19,6 +20,7 @@
             '<span class="badge">🔥 스트릭 ' + st + '일</span>' +
             '<span class="badge">🏆 최고 ' + S.bestStreak + '일</span>' +
             '<span class="badge">🛡 방어막 ' + (S.freezes || 0) + '</span>' +
+            (tickets ? '<span class="badge">🎟 사용권 ' + tickets + '</span>' : '') +
           '</div>' +
         '</div>';
     }

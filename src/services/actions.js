@@ -164,9 +164,18 @@
     commit();
   };
 
-  /* ---- 보상 ---- */
-  A.addReward = function (name, cost) {
-    PR.store.state.rewards.push({ id: PR.uid(), name: name, cost: cost });
+  /* ---- 보상 & 사용권(티켓) ----
+     구매 = 티켓 발급, 사용 = 티켓 소진. 다회성 보상은 티켓이 여러 장 쌓이고,
+     1회성은 티켓이 남아 있는 동안 상점에서 잠긴다. */
+
+  /* 1회성 보상이 이미 소진됐는지 — 플래그가 아니라 티켓 유무에서 파생 */
+  A.isSoldOut = function (r) {
+    if (!r || !r.once) return false;
+    return PR.store.state.purchases.some(function (x) { return x.rewardId === r.id; });
+  };
+
+  A.addReward = function (name, cost, once) {
+    PR.store.state.rewards.push({ id: PR.uid(), name: name, cost: cost, once: !!once });
     commit();
   };
 
@@ -179,11 +188,44 @@
   A.buyReward = function (id) {
     var S = PR.store.state;
     var r = S.rewards.find(function (x) { return x.id === id; });
-    if (!r || S.points < r.cost) return;
+    if (!r || S.points < r.cost || A.isSoldOut(r)) return;
     S.points -= r.cost;
-    S.purchases.push({ id: PR.uid(), name: r.name, cost: r.cost, date: PR.todayStr() });
+    S.purchases.push({ id: PR.uid(), rewardId: r.id, name: r.name, cost: r.cost,
+                       date: PR.todayStr(), used: false, usedAt: '' });
     commit();
-    PR.toast('🎉 "' + PR.esc(r.name) + '" 구매! 마음껏 즐기세요');
+    PR.toast('🎟 "' + PR.esc(r.name) + '" 사용권을 받았어요!' +
+      '<br><span style="opacity:.75">쓰고 싶을 때 상점에서 사용하세요</span>');
+  };
+
+  /* 티켓 사용 (실제로 누릴 때) */
+  A.useTicket = function (id) {
+    var t = PR.store.state.purchases.find(function (x) { return x.id === id; });
+    if (!t || t.used) return;
+    t.used = true;
+    t.usedAt = PR.todayStr();
+    commit();
+    PR.toast('🎉 "' + PR.esc(t.name) + '" 사용! 마음껏 즐기세요');
+  };
+
+  /* 잘못 눌러 사용 처리된 티켓 되돌리기 */
+  A.unuseTicket = function (id) {
+    var t = PR.store.state.purchases.find(function (x) { return x.id === id; });
+    if (!t || !t.used) return;
+    t.used = false;
+    t.usedAt = '';
+    commit();
+  };
+
+  /* 아직 안 쓴 티켓 환불 — 포인트를 돌려주고 티켓을 없앤다.
+     1회성 보상은 티켓이 사라지면 자동으로 다시 살 수 있게 된다(파생 계산이므로). */
+  A.refundTicket = function (id) {
+    var S = PR.store.state;
+    var t = S.purchases.find(function (x) { return x.id === id; });
+    if (!t || t.used) return;
+    S.points += t.cost;
+    S.purchases = S.purchases.filter(function (x) { return x.id !== id; });
+    commit();
+    PR.toast('↩️ 구매 취소 · +' + t.cost + 'P 돌려받음');
   };
 
   /* ---- 번외 기록: 계획에 없던 일. 가치의 80% 지급, 보너스·스트릭 없음 ---- */
